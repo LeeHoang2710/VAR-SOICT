@@ -1,0 +1,190 @@
+{"content_id": "parti_000", "content_prompt": "an F1", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_001", "content_prompt": "parallel lines", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": "Math concepts"}
+{"content_id": "parti_002", "content_prompt": "concentric circles", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": "Math concepts"}
+{"content_id": "parti_003", "content_prompt": "concurrent lines", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": "Math concepts"}
+{"content_id": "parti_004", "content_prompt": "congruent triangles", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": "Math concepts"}
+{"content_id": "parti_005", "content_prompt": "a hot air balloon", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_006", "content_prompt": "a shiba inu", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_007", "content_prompt": "an espresso machine", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_008", "content_prompt": "a propaganda poster", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_009", "content_prompt": "A bowl of Pho", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_010", "content_prompt": "a snail", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_011", "content_prompt": "brain coral", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_012", "content_prompt": "a walnut", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_013", "content_prompt": "a capybara", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_014", "content_prompt": "a baby penguin", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_015", "content_prompt": "a cup of boba", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_016", "content_prompt": "A picture of some food in the plate", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": "VQ-Diffusion"}
+{"content_id": "parti_017", "content_prompt": "a chair", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_018", "content_prompt": "a hedgehog", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_019", "content_prompt": "a corgi", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_020", "content_prompt": "a robot", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_021", "content_prompt": "robots", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_022", "content_prompt": "a fall landscape", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_023", "content_prompt": "a sunset", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_024", "content_prompt": "a boat", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_025", "content_prompt": "a fox", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_026", "content_prompt": "a red cube", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_027", "content_prompt": "a panda", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_028", "content_prompt": "a space elevator", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": "GLIDE"}
+{"content_id": "parti_029", "content_prompt": "a city", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_030", "content_prompt": "a fog", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_031", "content_prompt": "a clock", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_032", "content_prompt": "a phone", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_033", "content_prompt": "food", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_034", "content_prompt": "a store front", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_035", "content_prompt": "an armchair", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_036", "content_prompt": "a teapot", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_037", "content_prompt": "an illustration of a teapot", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": "DALL-E"}
+{"content_id": "parti_038", "content_prompt": "a tiger", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_039", "content_prompt": "a bench", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_040", "content_prompt": "an orange", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_041", "content_prompt": "a laptop", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_042", "content_prompt": "an owl", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_043", "content_prompt": "a train", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_044", "content_prompt": "a cow", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_045", "content_prompt": "a submarine", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_046", "content_prompt": "a whale", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_047", "content_prompt": "a t-shirt", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_048", "content_prompt": "a bowl", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_049", "content_prompt": "a flag", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_050", "content_prompt": "a cat", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_051", "content_prompt": "a towel", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_052", "content_prompt": "a wall", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_053", "content_prompt": "a car", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_054", "content_prompt": "a giraffe", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_055", "content_prompt": "an eagle", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_056", "content_prompt": "a kangaroo", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_057", "content_prompt": "a canal", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_058", "content_prompt": "lily pads", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_059", "content_prompt": "a street", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_060", "content_prompt": "a house", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_061", "content_prompt": "a fish", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_062", "content_prompt": "a city intersection", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_063", "content_prompt": "a circle", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_064", "content_prompt": "a red circle", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_065", "content_prompt": "a box", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_066", "content_prompt": "a yellow box", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_067", "content_prompt": "a red box", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_068", "content_prompt": "a sphere", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_069", "content_prompt": "a red sphere", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_070", "content_prompt": "a large blue box", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_071", "content_prompt": "a blue metallic sphere", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_072", "content_prompt": "a horse", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_073", "content_prompt": "a pumpkin", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_074", "content_prompt": "a sword", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_075", "content_prompt": "a statue", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_076", "content_prompt": "a logo", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_077", "content_prompt": "a circular logo", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_078", "content_prompt": "a coffee mug", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_079", "content_prompt": "a pig", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_080", "content_prompt": "a squirrel", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_081", "content_prompt": "a hammer", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_082", "content_prompt": "a screwdriver", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_083", "content_prompt": "a handsaw", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_084", "content_prompt": "a power drill", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_085", "content_prompt": "a cocktail", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_086", "content_prompt": "a margarita", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_087", "content_prompt": "an avocado", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_088", "content_prompt": "a kitchen", "category": "Indoor Scenes", "superclass": "indoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_089", "content_prompt": "an iPhone case", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_090", "content_prompt": "a coffee maker", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_091", "content_prompt": "a banana", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_092", "content_prompt": "a violin", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_093", "content_prompt": "a room", "category": "Indoor Scenes", "superclass": "indoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_094", "content_prompt": "a mountain", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_095", "content_prompt": "a bird", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_096", "content_prompt": "a TV", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_097", "content_prompt": "a Christmas tree", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_098", "content_prompt": "a zebra", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_099", "content_prompt": "a koi fish", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_100", "content_prompt": "a pineapple", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_101", "content_prompt": "a toaster", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_102", "content_prompt": "a sign", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_103", "content_prompt": "a red lego block", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_104", "content_prompt": "teacup", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_105", "content_prompt": "chair", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_106", "content_prompt": "waterfall", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_107", "content_prompt": "a pirate ship", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_108", "content_prompt": "a dragon", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_109", "content_prompt": "a present", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_110", "content_prompt": "a bottle", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_111", "content_prompt": "a book cover", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_112", "content_prompt": "a sweatshirt", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_113", "content_prompt": "matching socks", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_114", "content_prompt": "cash", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_115", "content_prompt": "a wood cabin", "category": "Indoor Scenes", "superclass": "indoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_116", "content_prompt": "a clock tower", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_117", "content_prompt": "a chimpanzee", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_118", "content_prompt": "a hat", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_119", "content_prompt": "sneakers", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_120", "content_prompt": "a roast turkey", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_121", "content_prompt": "a turkey", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_122", "content_prompt": "a plate", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_123", "content_prompt": "a ladder", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_124", "content_prompt": "a Tyrannosaurus Rex", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_125", "content_prompt": "a Stegasaurus", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_126", "content_prompt": "a Triceratops", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_127", "content_prompt": "a Styracosaurus", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_128", "content_prompt": "a Diplodocus", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_129", "content_prompt": "a yellow sticky note", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_130", "content_prompt": "a ball", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_131", "content_prompt": "red balls", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_132", "content_prompt": "an ostrich", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_133", "content_prompt": "a stone path", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_134", "content_prompt": "a wooden deck", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_135", "content_prompt": "an F1 race car", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_136", "content_prompt": "a taxi", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_137", "content_prompt": "a road", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_138", "content_prompt": "a volcano", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_139", "content_prompt": "a large open book", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_140", "content_prompt": "a living room", "category": "Indoor Scenes", "superclass": "indoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_141", "content_prompt": "an elephant", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_142", "content_prompt": "a tree", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_143", "content_prompt": "a dolphin", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_144", "content_prompt": "a rowboat", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_145", "content_prompt": "a crown", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_146", "content_prompt": "a pick-up truck", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_147", "content_prompt": "a key", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_148", "content_prompt": "a goat", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_149", "content_prompt": "a chest", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_150", "content_prompt": "a coffee table", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_151", "content_prompt": "toy cars", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_152", "content_prompt": "a bookshelf", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_153", "content_prompt": "the moon", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_154", "content_prompt": "the Earth", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_155", "content_prompt": "the planet Jupiter", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_156", "content_prompt": "a tornado", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_157", "content_prompt": "a tidal wave", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_158", "content_prompt": "a laptop screen", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_159", "content_prompt": "an airplane", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_160", "content_prompt": "a butterfly", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_161", "content_prompt": "a lizard", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_162", "content_prompt": "a turtle", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_163", "content_prompt": "an octopus", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_164", "content_prompt": "a book", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_165", "content_prompt": "a moose", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_166", "content_prompt": "a doorknocker", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_167", "content_prompt": "a rabbit", "category": "Animals", "superclass": "animals", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_168", "content_prompt": "orange juice", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_169", "content_prompt": "a green pepper", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_170", "content_prompt": "beer", "category": "Food & Beverage", "superclass": "food and beverage", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_171", "content_prompt": "a pickup truck", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_172", "content_prompt": "a shoe", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_173", "content_prompt": "a plant", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_174", "content_prompt": "a flower", "category": "Produce & Plants", "superclass": "plants and produce", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_175", "content_prompt": "a pair of headphones", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_176", "content_prompt": "a chemtrail", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_177", "content_prompt": "a tennis court", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_178", "content_prompt": "a ceiling fan", "category": "Indoor Scenes", "superclass": "indoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_179", "content_prompt": "a fire hydrant", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_180", "content_prompt": "a wooden post", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_181", "content_prompt": "a trash bin", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_182", "content_prompt": "a piano", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_183", "content_prompt": "a musical note", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_184", "content_prompt": "a harp", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_185", "content_prompt": "a tuba", "category": "Artifacts", "superclass": "objects", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_186", "content_prompt": "a windmill", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_187", "content_prompt": "a motorcycle", "category": "Vehicles", "superclass": "vehicles", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_188", "content_prompt": "a painting of black and white", "category": "Illustrations", "superclass": "illustrations", "parti_challenge": "Basic", "parti_note": ""}
+{"content_id": "parti_189", "content_prompt": "a marina", "category": "Outdoor Scenes", "superclass": "outdoor scenes", "parti_challenge": "Basic", "parti_note": ""}
