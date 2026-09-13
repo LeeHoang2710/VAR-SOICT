@@ -19,7 +19,7 @@ def build_runtime_paths(config: ExperimentConfig) -> RuntimePaths:
     port_dir = root / "gguf_port"
     official_dir = port_dir / "Infinity"
     asset_dir = root / "assets"
-    output_dir = runtime_root / "Infinity_outputs" / "infinity2b_random_3_prompts_per_eval_style"
+    output_dir = runtime_root / "Infinity_outputs" / config.output_run_name
     paths = RuntimePaths(
         root=root,
         port_dir=port_dir,

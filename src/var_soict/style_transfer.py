@@ -35,23 +35,133 @@ def phi_svd(feature, alpha: float = 1.0, rank: int | None = None):
     return torch.stack(outputs).to(dtype=original_dtype)
 
 
-def principal_feature_blend(generation_feature, style_feature, alpha=1.0, rank=None, strength=1.0):
+def resize_mask_to_feature(mask, feature):
+    if mask is None:
+        return None
+
+    mask = mask.detach().float().to(device=feature.device)
+    while mask.ndim > 2 and mask.shape[0] == 1:
+        mask = mask.squeeze(0)
+    if mask.ndim != 2:
+        raise ValueError(f"Expected a 2D object mask after squeezing singleton dimensions, got {tuple(mask.shape)}.")
+
+    mask = mask.unsqueeze(0).unsqueeze(0)
+    mask = F.interpolate(mask, size=feature.shape[-2:], mode="bilinear", align_corners=False)
+    if feature.ndim == 5:
+        mask = mask.unsqueeze(2)
+    while mask.ndim < feature.ndim:
+        mask = mask.unsqueeze(0)
+    return mask.to(dtype=feature.dtype).clamp(0, 1)
+
+
+def principal_feature_blend(
+    generation_feature,
+    style_feature,
+    alpha=1.0,
+    rank=None,
+    strength=1.0,
+    mask=None,
+    background_strength=0.0,
+):
     """PFB with optional strength multiplier; strength=1 is the paper method."""
     if generation_feature.shape != style_feature.shape:
         raise ValueError(f"PFB shape mismatch: {generation_feature.shape} vs {style_feature.shape}")
     style_feature = style_feature.to(generation_feature)
     style_component = phi_svd(style_feature, alpha=alpha, rank=rank)
     generation_component = phi_svd(generation_feature, alpha=alpha, rank=rank)
-    return generation_feature + float(strength) * (style_component - generation_component)
+    delta = float(strength) * (style_component - generation_component)
+    if mask is not None:
+        feature_mask = resize_mask_to_feature(mask, generation_feature)
+        mask_weight = float(background_strength) + (1.0 - float(background_strength)) * feature_mask
+        delta = delta * mask_weight
+    return generation_feature + delta
 
 
-def apply_feature_edit(generation_feature, style_feature, mode, alpha=1.0, rank=None, strength=1.0):
+def principal_feature_blend_regions(
+    generation_feature,
+    style_feature,
+    *,
+    target_mask,
+    style_mask,
+    alpha=1.0,
+    foreground_rank=None,
+    background_rank=None,
+    foreground_strength=1.0,
+    background_strength=0.0,
+):
+    """Apply foreground style to target foreground and background style to target background."""
+    if generation_feature.shape != style_feature.shape:
+        raise ValueError(f"PFB shape mismatch: {generation_feature.shape} vs {style_feature.shape}")
+
+    style_feature = style_feature.to(generation_feature)
+    target_foreground = resize_mask_to_feature(target_mask, generation_feature)
+    target_background = 1.0 - target_foreground
+
+    if style_mask is None:
+        style_foreground = style_feature
+        style_background = style_feature
+    else:
+        style_foreground_mask = resize_mask_to_feature(style_mask, style_feature)
+        style_foreground = style_feature * style_foreground_mask
+        style_background = style_feature * (1.0 - style_foreground_mask)
+
+    generation_foreground = generation_feature * target_foreground
+    generation_background = generation_feature * target_background
+
+    foreground_delta = phi_svd(style_foreground, alpha=alpha, rank=foreground_rank) - phi_svd(
+        generation_foreground, alpha=alpha, rank=foreground_rank
+    )
+    background_delta = phi_svd(style_background, alpha=alpha, rank=background_rank) - phi_svd(
+        generation_background, alpha=alpha, rank=background_rank
+    )
+
+    return (
+        generation_feature
+        + float(foreground_strength) * target_foreground * foreground_delta
+        + float(background_strength) * target_background * background_delta
+    )
+
+
+def apply_feature_edit(
+    generation_feature,
+    style_feature,
+    mode,
+    alpha=1.0,
+    rank=None,
+    strength=1.0,
+    mask=None,
+    background_strength=0.0,
+    style_mask=None,
+    split_style_regions=False,
+    foreground_rank=None,
+    background_rank=None,
+):
     if mode == "none":
         return generation_feature
     if mode == "replace":
         return style_feature.to(generation_feature)
     if mode == "pfb":
-        return principal_feature_blend(generation_feature, style_feature, alpha=alpha, rank=rank, strength=strength)
+        if split_style_regions and mask is not None:
+            return principal_feature_blend_regions(
+                generation_feature,
+                style_feature,
+                target_mask=mask,
+                style_mask=style_mask,
+                alpha=alpha,
+                foreground_rank=rank if foreground_rank is None else foreground_rank,
+                background_rank=rank if background_rank is None else background_rank,
+                foreground_strength=strength,
+                background_strength=background_strength,
+            )
+        return principal_feature_blend(
+            generation_feature,
+            style_feature,
+            alpha=alpha,
+            rank=rank,
+            strength=strength,
+            mask=mask,
+            background_strength=background_strength,
+        )
     raise ValueError(f"Unknown edit mode: {mode}")
 
 
@@ -305,6 +415,12 @@ class StyleTransferEngine:
         style_strength=1.0,
         style_decay=1.0,
         style_strength_by_step=None,
+        feature_masks_by_step=None,
+        style_masks_by_step=None,
+        masked_background_strength=0.0,
+        split_style_regions=False,
+        foreground_rank=None,
+        background_rank=None,
         sac_strength=1.0,
         enable_sac=True,
     ):
@@ -334,6 +450,22 @@ class StyleTransferEngine:
                 strength < 0 for strength in style_strength_by_step.values()
             ):
                 raise ValueError("style_strength_by_step must provide one non-negative strength for every PFB scale.")
+        if feature_masks_by_step is None:
+            feature_masks_by_step = {}
+        else:
+            feature_masks_by_step = {int(step): mask for step, mask in feature_masks_by_step.items()}
+            unexpected_mask_steps = set(feature_masks_by_step) - set(pfb_feature_indices)
+            if unexpected_mask_steps:
+                raise ValueError(f"Mask steps must also be PFB steps, got extra steps: {sorted(unexpected_mask_steps)}")
+        if style_masks_by_step is None:
+            style_masks_by_step = {}
+        else:
+            style_masks_by_step = {int(step): mask for step, mask in style_masks_by_step.items()}
+            unexpected_style_mask_steps = set(style_masks_by_step) - set(pfb_feature_indices)
+            if unexpected_style_mask_steps:
+                raise ValueError(
+                    f"Style-mask steps must also be PFB steps, got extra steps: {sorted(unexpected_style_mask_steps)}"
+                )
         if enable_sac and not 0 <= sac_prediction_start < len(self.scale_schedule):
             raise ValueError("Invalid SAC prediction start.")
 
@@ -448,6 +580,12 @@ class StyleTransferEngine:
                                 alpha=alpha,
                                 rank=rank,
                                 strength=effective_strength,
+                                mask=feature_masks_by_step.get(step_id),
+                                style_mask=style_masks_by_step.get(step_id),
+                                background_strength=masked_background_strength,
+                                split_style_regions=split_style_regions,
+                                foreground_rank=foreground_rank,
+                                background_rank=background_rank,
                             )
                             pfb_relative_change_by_step[step_id] = float(
                                 (generation_summed - generation_before_edit).norm()
@@ -503,6 +641,12 @@ class StyleTransferEngine:
         enable_sac,
         rank=None,
         style_strength_by_step=None,
+        feature_masks_by_step=None,
+        style_masks_by_step=None,
+        masked_background_strength=0.0,
+        split_style_regions=False,
+        foreground_rank=None,
+        background_rank=None,
     ):
         style_features = self.get_style_features(style_path)
         with torch.inference_mode():
@@ -515,6 +659,12 @@ class StyleTransferEngine:
                 style_strength=style_strength,
                 style_decay=style_decay,
                 style_strength_by_step=style_strength_by_step,
+                feature_masks_by_step=feature_masks_by_step,
+                style_masks_by_step=style_masks_by_step,
+                masked_background_strength=masked_background_strength,
+                split_style_regions=split_style_regions,
+                foreground_rank=foreground_rank,
+                background_rank=background_rank,
                 sac_strength=1.0,
                 enable_sac=enable_sac,
             )
@@ -523,4 +673,3 @@ class StyleTransferEngine:
         gc.collect()
         torch.cuda.empty_cache()
         return image
-

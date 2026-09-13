@@ -31,6 +31,7 @@ class ExperimentConfig:
     root: Path = Path("/content/notebook_09_infinity2b_gguf")
     official_repo: str = "https://github.com/FoundationVision/Infinity.git"
     gguf_repo: str = "kzopp/Infinity-2B-GGUF_UNOFFICIAL"
+    output_run_name: str = "infinity2b_random_3_prompts_per_eval_style"
     model_pn: str = "0.25M"
     t5_device: str = "cuda"
 
@@ -58,10 +59,26 @@ class ExperimentConfig:
     top1_style_strength: float = 1.0
     top1_style_decay: float = 0.75
 
+    object_mask_model_id: str = "CIDAS/clipseg-rd64-refined"
+    object_mask_device: str = "cpu"
+    object_mask_threshold: float | None = None
+    style_reference_mask_prompt: str = "main object"
+    style_reference_mask_threshold: float | None = None
+    object_masked_feature_indices: list[int] = field(default_factory=lambda: [0, 1, 3, 6, 9])
+    object_masked_mask_feature_indices: list[int] = field(default_factory=lambda: [3, 6, 9])
+    object_masked_style_strength_by_step: dict[int, float] = field(
+        default_factory=lambda: {0: 0.8, 1: 0.6, 3: 1.0, 6: 0.75, 9: 0.5}
+    )
+    object_masked_background_strength: float = 0.15
+    object_masked_foreground_svd_rank: int = 1
+    object_masked_background_svd_rank: int = 1
+    object_masked_split_style_regions: bool = True
+
     run_baseline: bool = True
     run_pfb_sac: bool = True
     run_multistep: bool = True
     run_top1_style_steps: bool = True
+    run_object_masked_style_steps: bool = False
     run_aggregate: bool = True
 
     @property
@@ -102,4 +119,3 @@ class ModelBundle:
     vae: object
     infinity_model: object
     scale_schedule: list[tuple[int, int, int]]
-
