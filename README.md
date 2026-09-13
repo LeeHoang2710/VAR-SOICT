@@ -2,7 +2,7 @@
 
 This folder contains the full Figure 10 style-prompt preparation bundle for arXiv:2507.04482 using the local FineStyle/Parti prompt subset.
 
-- `styles/`: 21 Figure 10 style reference images copied from `VAR_Style_Transfer_Workspace/style_figure10`.
+- `styles/`: 21 Figure 10 style reference images used by the evaluation bundle.
 - `manifest/styles_21.csv`: metadata for all 21 style references.
 - `prompts/content_prompts_190.csv`: the 190 filtered Parti content prompts with superclass labels.
 - `prompts/eval_cases_190x21.csv`: all 3,990 content/style prompt combinations.

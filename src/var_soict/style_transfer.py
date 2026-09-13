@@ -621,9 +621,9 @@ class StyleTransferEngine:
             for block in self.model.unregistered_blocks:
                 block.sa.kv_caching(False)
 
-    def generate_content_image(self, prompt):
+    def generate_content_image(self, prompt, *, seed=None):
         with torch.inference_mode():
-            result = self.paper_dual_path_generate(prompt, [], edit_mode="none", enable_sac=False)
+            result = self.paper_dual_path_generate(prompt, [], edit_mode="none", enable_sac=False, seed=seed)
         image = result["content_image_01"].detach().float().cpu()
         del result
         gc.collect()
@@ -635,6 +635,49 @@ class StyleTransferEngine:
         prompt,
         style_path,
         *,
+        seed=None,
+        pfb_feature_indices,
+        style_decay,
+        style_strength,
+        enable_sac,
+        rank=None,
+        style_strength_by_step=None,
+        feature_masks_by_step=None,
+        style_masks_by_step=None,
+        masked_background_strength=0.0,
+        split_style_regions=False,
+        foreground_rank=None,
+        background_rank=None,
+    ):
+        result = self.generate_variant_result(
+            prompt,
+            style_path,
+            seed=seed,
+            pfb_feature_indices=pfb_feature_indices,
+            style_decay=style_decay,
+            style_strength=style_strength,
+            enable_sac=enable_sac,
+            rank=rank,
+            style_strength_by_step=style_strength_by_step,
+            feature_masks_by_step=feature_masks_by_step,
+            style_masks_by_step=style_masks_by_step,
+            masked_background_strength=masked_background_strength,
+            split_style_regions=split_style_regions,
+            foreground_rank=foreground_rank,
+            background_rank=background_rank,
+        )
+        image = result["stylized_image_01"].detach().float().cpu()
+        del result
+        gc.collect()
+        torch.cuda.empty_cache()
+        return image
+
+    def generate_variant_result(
+        self,
+        prompt,
+        style_path,
+        *,
+        seed=None,
         pfb_feature_indices,
         style_decay,
         style_strength,
@@ -653,6 +696,7 @@ class StyleTransferEngine:
             result = self.paper_dual_path_generate(
                 prompt,
                 style_features,
+                seed=seed,
                 pfb_feature_indices=pfb_feature_indices,
                 edit_mode="pfb",
                 rank=rank,
@@ -668,8 +712,12 @@ class StyleTransferEngine:
                 sac_strength=1.0,
                 enable_sac=enable_sac,
             )
-        image = result["stylized_image_01"].detach().float().cpu()
-        del style_features, result
+        result["content_image_01"] = result["content_image_01"].detach().float().cpu()
+        result["stylized_image_01"] = result["stylized_image_01"].detach().float().cpu()
+        result["content_features"] = [feature.detach().float().cpu() for feature in result["content_features"]]
+        result["generation_features"] = [feature.detach().float().cpu() for feature in result["generation_features"]]
+        result["style_features"] = [feature.detach().float().cpu() for feature in style_features]
+        del style_features
         gc.collect()
         torch.cuda.empty_cache()
-        return image
+        return result

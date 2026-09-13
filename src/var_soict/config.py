@@ -58,6 +58,16 @@ class ExperimentConfig:
     top1_style_svd_rank: int = 1
     top1_style_strength: float = 1.0
     top1_style_decay: float = 0.75
+    top2_style_feature_indices: list[int] = field(default_factory=lambda: [0, 1, 2, 9])
+    top2_style_svd_rank: int = 2
+    top2_style_strength: float = 1.0
+    top2_style_decay: float = 0.75
+
+    global_01369_feature_indices: list[int] = field(default_factory=lambda: [0, 1, 3, 6, 9])
+    global_01369_svd_rank: int = 1
+    global_01369_style_strength_by_step: dict[int, float] = field(
+        default_factory=lambda: {0: 0.8, 1: 0.6, 3: 1.0, 6: 0.75, 9: 0.5}
+    )
 
     object_mask_model_id: str = "CIDAS/clipseg-rd64-refined"
     object_mask_device: str = "cpu"
@@ -78,8 +88,15 @@ class ExperimentConfig:
     run_pfb_sac: bool = True
     run_multistep: bool = True
     run_top1_style_steps: bool = True
+    run_top2_style_steps: bool = False
+    run_global_01369_style_steps: bool = False
+    run_object_only_masked_style_steps: bool = False
+    run_foreground_split_masked_style_steps: bool = False
     run_object_masked_style_steps: bool = False
+    run_background_only_masked_style_steps: bool = False
     run_aggregate: bool = True
+    save_scale_diagnostics: bool = True
+    save_scale_diagnostics_for_all_variants: bool = False
 
     @property
     def expected_cases_per_variant(self) -> int:
