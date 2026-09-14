@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import re
 import shutil
 import subprocess
@@ -227,7 +228,14 @@ def verify_model_files(paths: RuntimePaths, files: ModelFiles) -> None:
     print("All GGUF, VAE, and official source files are present.")
 
 
+def _drop_cached_infinity_modules() -> None:
+    for module_name in list(sys.modules):
+        if module_name == "infinity" or module_name.startswith("infinity."):
+            del sys.modules[module_name]
+
+
 def import_gguf_loader(paths: RuntimePaths, files: ModelFiles):
+    _drop_cached_infinity_modules()
     sys.path.insert(0, str(paths.port_dir))
     sys.path.insert(0, str(paths.infinity_runtime_dir))
 
@@ -250,6 +258,52 @@ def import_gguf_loader(paths: RuntimePaths, files: ModelFiles):
     spec.loader.exec_module(gguf_loader)
     print("Custom GGUF loader imported successfully.")
     return gguf_loader
+
+
+def validate_infinity_runtime_imports(paths: RuntimePaths) -> None:
+    from infinity.models.basic import CrossAttnBlock, SelfAttention
+    from infinity.models.infinity import Infinity, sample_with_top_k_top_p_also_inplace_modifying_logits_
+    from infinity.utils.dynamic_resolution import dynamic_resolution_h_w
+
+    infinity_model_file = Path(inspect.getfile(Infinity)).resolve()
+    runtime_root = paths.infinity_runtime_dir.resolve()
+    if runtime_root not in infinity_model_file.parents:
+        raise RuntimeError(
+            "Python is not importing Infinity from the patched runtime copy.\n"
+            f"Expected under: {runtime_root}\n"
+            f"Actual: {infinity_model_file}"
+        )
+
+    cross_block_params = inspect.signature(CrossAttnBlock.forward).parameters
+    required_cross_block_params = {
+        "x",
+        "cond_BD",
+        "ca_kv",
+        "attn_bias_or_two_vector",
+        "attn_fn",
+        "scale_schedule",
+        "rope2d_freqs_grid",
+        "scale_ind",
+    }
+    missing_cross_block_params = required_cross_block_params - set(cross_block_params)
+    if missing_cross_block_params:
+        raise RuntimeError(f"Unexpected CrossAttnBlock.forward signature; missing {missing_cross_block_params}.")
+
+    self_attention_params = inspect.signature(SelfAttention.forward).parameters
+    required_attention_params = {"x", "attn_bias_or_two_vector", "attn_fn", "scale_schedule", "rope2d_freqs_grid", "scale_ind"}
+    missing_attention_params = required_attention_params - set(self_attention_params)
+    if missing_attention_params:
+        raise RuntimeError(f"Unexpected SelfAttention.forward signature; missing {missing_attention_params}.")
+
+    sample_params = inspect.signature(sample_with_top_k_top_p_also_inplace_modifying_logits_).parameters
+    required_sample_params = {"logits_BlV", "top_k", "top_p", "rng", "num_samples"}
+    missing_sample_params = required_sample_params - set(sample_params)
+    if missing_sample_params:
+        raise RuntimeError(f"Unexpected Infinity sampling signature; missing {missing_sample_params}.")
+    if "0.25M" not in dynamic_resolution_h_w[1.0]:
+        raise RuntimeError("Infinity dynamic resolution table does not contain the expected 0.25M preset.")
+
+    print("Infinity runtime import check passed:", infinity_model_file)
 
 
 def load_model_bundle(config: ExperimentConfig, files: ModelFiles, gguf_loader) -> ModelBundle:

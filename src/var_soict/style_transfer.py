@@ -9,10 +9,36 @@ import torch
 import torch.nn.functional as F
 import torchvision
 from PIL import Image, ImageOps
-from infinity.models.basic import CrossAttnBlock, apply_rotary_emb, slow_attn
-from infinity.models.infinity import sample_with_top_k_top_p_also_inplace_modifying_logits_
 
 from .config import ExperimentConfig, ModelBundle
+
+
+CrossAttnBlock = None
+apply_rotary_emb = None
+slow_attn = None
+sample_with_top_k_top_p_also_inplace_modifying_logits_ = None
+
+
+def _load_infinity_symbols():
+    global CrossAttnBlock
+    global apply_rotary_emb
+    global slow_attn
+    global sample_with_top_k_top_p_also_inplace_modifying_logits_
+
+    if CrossAttnBlock is not None:
+        return
+
+    from infinity.models.basic import CrossAttnBlock as _CrossAttnBlock
+    from infinity.models.basic import apply_rotary_emb as _apply_rotary_emb
+    from infinity.models.basic import slow_attn as _slow_attn
+    from infinity.models.infinity import (
+        sample_with_top_k_top_p_also_inplace_modifying_logits_ as _sample_with_top_k_top_p,
+    )
+
+    CrossAttnBlock = _CrossAttnBlock
+    apply_rotary_emb = _apply_rotary_emb
+    slow_attn = _slow_attn
+    sample_with_top_k_top_p_also_inplace_modifying_logits_ = _sample_with_top_k_top_p
 
 
 def phi_svd(feature, alpha: float = 1.0, rank: int | None = None):
@@ -189,6 +215,7 @@ def _infinity_sac_attention_forward(
     rope2d_freqs_grid=None,
     scale_ind=0,
 ):
+    _load_infinity_symbols()
     batch4, length, channels = x.shape
     if attention.using_flash:
         raise RuntimeError("SAC patch expects customized_flash_attn=False.")
@@ -272,6 +299,7 @@ class PaperSACPatch:
         self.original_forwards = []
 
     def __enter__(self):
+        _load_infinity_symbols()
         for block in self.model.unregistered_blocks:
             if not isinstance(block, CrossAttnBlock):
                 continue
@@ -371,6 +399,7 @@ class StyleTransferEngine:
         return kv_compact, lens, cu_seqlens_k, max_seqlen_k
 
     def _sample_bit_labels(self, logits_bl2d, rng, top_k, top_p):
+        _load_infinity_symbols()
         batch, seq_len = logits_bl2d.shape[:2]
         logits = logits_bl2d.reshape(batch, -1, 2).clone()
         sampled = sample_with_top_k_top_p_also_inplace_modifying_logits_(
