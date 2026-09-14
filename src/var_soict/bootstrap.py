@@ -5,25 +5,43 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from .config import DEPENDENCY_PACKAGES, ExperimentConfig, ModelBundle, ModelFiles, RuntimePaths
 from .t5_streaming import load_t5_encoder_streaming
 
 
+def _find_project_root(start: Path | None = None) -> Path:
+    start = Path.cwd() if start is None else Path(start)
+    candidates = [start.resolve(), *start.resolve().parents, Path("/content/VAR_SOICT")]
+    for candidate in candidates:
+        if (candidate / "src" / "var_soict").exists():
+            return candidate
+    return start.resolve()
+
+
 def build_runtime_paths(config: ExperimentConfig) -> RuntimePaths:
-    runtime_root = Path("/content") if Path("/content").exists() else Path.cwd()
+    runtime_root = Path("/content") if Path("/content").exists() else Path(tempfile.gettempdir()) / "var_soict_runtime"
     root = Path(config.root)
     if not Path("/content").exists() and str(root).startswith("/content/"):
-        root = runtime_root / ".runtime" / root.name
+        root = runtime_root / root.name
+    elif not root.is_absolute():
+        root = runtime_root / root
+    project_root = _find_project_root(Path.cwd())
+    official_dir = Path(config.infinity_source_dir) if config.infinity_source_dir is not None else Path("Infinity")
+    if not official_dir.is_absolute():
+        official_dir = project_root / official_dir
     port_dir = root / "gguf_port"
-    official_dir = port_dir / "Infinity"
+    infinity_runtime_dir = root / "Infinity_runtime"
     asset_dir = root / "assets"
     output_dir = runtime_root / "Infinity_outputs" / config.output_run_name
     paths = RuntimePaths(
         root=root,
+        project_root=project_root,
         port_dir=port_dir,
         official_dir=official_dir,
+        infinity_runtime_dir=infinity_runtime_dir,
         asset_dir=asset_dir,
         runtime_root=runtime_root,
         output_dir=output_dir,
@@ -32,7 +50,9 @@ def build_runtime_paths(config: ExperimentConfig) -> RuntimePaths:
         aggregate_dir=output_dir / "aggregate",
     )
     for path in (
+        paths.root,
         paths.port_dir,
+        paths.infinity_runtime_dir,
         paths.asset_dir,
         paths.output_dir,
         paths.baseline_dir,
@@ -65,31 +85,83 @@ def install_dependencies(packages: list[str] | None = None) -> None:
     print("Dependency installation finished.")
 
 
-def _download_hf_file(repo_id: str, filename: str, target_dir: Path) -> Path:
+def _download_hf_file(repo_id: str, filename: str, target_dir: Path, *, download_missing: bool = True) -> Path:
+    target_path = target_dir / filename
+    if target_path.exists():
+        print("Using cached file:", target_path)
+        return target_path
+    if not download_missing:
+        raise FileNotFoundError(
+            "Missing cached model file and downloads are disabled:\n"
+            f"{target_path}\n"
+            "Set download_missing_model_files=True for the first setup run."
+        )
+
     from huggingface_hub import hf_hub_download
 
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     return Path(hf_hub_download(repo_id=repo_id, filename=filename, local_dir=str(target_dir)))
+
+
+def _make_vendored_source_pushable(source_dir: Path) -> None:
+    nested_git = source_dir / ".git"
+    nested_gitignore = source_dir / ".gitignore"
+    if nested_git.exists():
+        shutil.rmtree(nested_git)
+        print("Removed nested Git metadata from vendored Infinity source:", nested_git)
+    if nested_gitignore.exists():
+        nested_gitignore.unlink()
+        print("Removed nested ignore file from vendored Infinity source:", nested_gitignore)
 
 
 def prepare_infinity_sources(config: ExperimentConfig, paths: RuntimePaths) -> ModelFiles:
     if not paths.official_dir.exists():
+        if not config.download_missing_model_files:
+            raise FileNotFoundError(
+                "Missing cached official Infinity source and downloads are disabled:\n"
+                f"{paths.official_dir}\n"
+                "Set download_missing_model_files=True for the first setup run."
+            )
         subprocess.run(["git", "clone", "--depth", "1", config.official_repo, str(paths.official_dir)], check=True)
     else:
         print("Official Infinity source already exists:", paths.official_dir)
+    _make_vendored_source_pushable(paths.official_dir)
 
-    port_script = _download_hf_file(config.gguf_repo, "generate_image_2b_q8_gguf.py", paths.port_dir)
-    port_utils = _download_hf_file(config.gguf_repo, "infinity_gguf_utils.py", paths.port_dir)
+    print("Official Infinity source:", paths.official_dir)
+    print("GGUF runtime cache:", paths.root)
+    port_script = _download_hf_file(
+        config.gguf_repo,
+        "generate_image_2b_q8_gguf.py",
+        paths.port_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    port_utils = _download_hf_file(
+        config.gguf_repo,
+        "infinity_gguf_utils.py",
+        paths.port_dir,
+        download_missing=config.download_missing_model_files,
+    )
     patch_dir = paths.root / "gguf_patched_source"
-    patched_basic = _download_hf_file(config.gguf_repo, "Infinity/infinity/models/basic.py", patch_dir)
-    patched_infinity = _download_hf_file(config.gguf_repo, "Infinity/infinity/models/infinity.py", patch_dir)
+    patched_basic = _download_hf_file(
+        config.gguf_repo,
+        "Infinity/infinity/models/basic.py",
+        patch_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    patched_infinity = _download_hf_file(
+        config.gguf_repo,
+        "Infinity/infinity/models/infinity.py",
+        patch_dir,
+        download_missing=config.download_missing_model_files,
+    )
 
-    official_basic = paths.official_dir / "infinity" / "models" / "basic.py"
-    official_infinity = paths.official_dir / "infinity" / "models" / "infinity.py"
-    shutil.copy2(patched_basic, official_basic)
-    shutil.copy2(patched_infinity, official_infinity)
+    shutil.copytree(paths.official_dir, paths.infinity_runtime_dir, dirs_exist_ok=True)
+    runtime_basic = paths.infinity_runtime_dir / "infinity" / "models" / "basic.py"
+    runtime_infinity = paths.infinity_runtime_dir / "infinity" / "models" / "infinity.py"
+    shutil.copy2(patched_basic, runtime_basic)
+    shutil.copy2(patched_infinity, runtime_infinity)
 
-    infinity_source = official_infinity.read_text()
+    infinity_source = runtime_infinity.read_text()
     old_attention_guard = (
         "customized_kernel_installed = any('Infinity' in arg_name for arg_name in "
         "flash_attn_func.__code__.co_varnames)"
@@ -101,11 +173,26 @@ def prepare_infinity_sources(config: ExperimentConfig, paths: RuntimePaths) -> M
     if old_attention_guard not in infinity_source and new_attention_guard not in infinity_source:
         raise RuntimeError("Expected optional-attention guard was not found in patched infinity.py")
     if old_attention_guard in infinity_source:
-        official_infinity.write_text(infinity_source.replace(old_attention_guard, new_attention_guard, 1))
+        runtime_infinity.write_text(infinity_source.replace(old_attention_guard, new_attention_guard, 1))
 
-    infinity_gguf = _download_hf_file(config.gguf_repo, "infinity_2b_reg_Q8_0.gguf", paths.asset_dir)
-    t5_gguf = _download_hf_file(config.gguf_repo, "flan-t5-xl-encoder-Q8_0.gguf", paths.asset_dir)
-    vae_path = _download_hf_file(config.gguf_repo, "Infinity/infinity_vae_d32_reg.pth", paths.asset_dir)
+    infinity_gguf = _download_hf_file(
+        config.gguf_repo,
+        "infinity_2b_reg_Q8_0.gguf",
+        paths.asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    t5_gguf = _download_hf_file(
+        config.gguf_repo,
+        "flan-t5-xl-encoder-Q8_0.gguf",
+        paths.asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    vae_path = _download_hf_file(
+        config.gguf_repo,
+        "Infinity/infinity_vae_d32_reg.pth",
+        paths.asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
     files = ModelFiles(port_script, port_utils, patched_basic, patched_infinity, infinity_gguf, t5_gguf, vae_path)
 
     print("GGUF model:", files.infinity_gguf)
@@ -113,6 +200,7 @@ def prepare_infinity_sources(config: ExperimentConfig, paths: RuntimePaths) -> M
     print("VAE:", files.vae_path)
     print("Loader:", files.port_script)
     print("Loader utility:", files.port_utils)
+    print("Patched Infinity runtime:", paths.infinity_runtime_dir)
     return files
 
 
@@ -130,15 +218,18 @@ def verify_model_files(paths: RuntimePaths, files: ModelFiles) -> None:
     if missing:
         raise FileNotFoundError("Missing required files:\n" + "\n".join(missing))
 
+    print("Official Infinity source:", paths.official_dir)
+    print("GGUF runtime cache:", paths.root)
     for path in required_files:
         print(f"{path.name:40s} {path.stat().st_size / 2**30:.3f} GiB")
     assert (paths.official_dir / "infinity" / "models" / "infinity.py").exists(), "Official Infinity source is incomplete."
+    assert (paths.infinity_runtime_dir / "infinity" / "models" / "infinity.py").exists(), "Patched Infinity runtime is incomplete."
     print("All GGUF, VAE, and official source files are present.")
 
 
 def import_gguf_loader(paths: RuntimePaths, files: ModelFiles):
     sys.path.insert(0, str(paths.port_dir))
-    sys.path.insert(0, str(paths.official_dir))
+    sys.path.insert(0, str(paths.infinity_runtime_dir))
 
     loader_source = files.port_script.read_text()
     compat_pattern = r"\n    # Apply NumPy 2\.0 compatibility patch.*?\n    # Load GGUF state dict"

@@ -12,6 +12,15 @@ This folder contains the full Figure 10 style-prompt preparation bundle for arXi
 
 Paths in the CSV and JSONL files are relative to this `VAR_SOICT` folder.
 
+Infinity runtime layout:
+
+- The official `FoundationVision/Infinity` source is vendored in `Infinity/` at the `VAR_SOICT` project root and used as the local source base by the notebooks.
+- `Infinity/` is a normal folder, not a nested git repository or submodule, so it can be pushed with this repo.
+- The GGUF loader files, patched GGUF source copies, Infinity-2B GGUF weights, T5 GGUF weights, VAE checkpoint, and generated outputs are kept outside the project-local source tree: `/content/...` on Colab, or the system temp directory for local dry runs.
+- At setup time, the code copies `Infinity/` to a runtime folder, applies the GGUF patches there, and imports from that patched runtime copy. This keeps the vendored `Infinity/` source clean.
+- Runtime folders are ignored by git. If a required GGUF/runtime file is already present in the runtime cache, setup prints `Using cached file:`; otherwise the first setup run downloads the missing file.
+- To force a no-download run after setup, set `download_missing_model_files=False` in `ExperimentConfig`; the setup cell will fail clearly if any required runtime file is missing.
+
 Prompt template:
 
 ```text

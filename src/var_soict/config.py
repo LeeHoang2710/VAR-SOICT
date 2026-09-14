@@ -29,6 +29,8 @@ DEPENDENCY_PACKAGES = [
 @dataclass(frozen=True)
 class ExperimentConfig:
     root: Path = Path("/content/notebook_09_infinity2b_gguf")
+    infinity_source_dir: Path | None = None
+    download_missing_model_files: bool = True
     official_repo: str = "https://github.com/FoundationVision/Infinity.git"
     gguf_repo: str = "kzopp/Infinity-2B-GGUF_UNOFFICIAL"
     output_run_name: str = "infinity2b_random_3_prompts_per_eval_style"
@@ -106,8 +108,10 @@ class ExperimentConfig:
 @dataclass(frozen=True)
 class RuntimePaths:
     root: Path
+    project_root: Path
     port_dir: Path
     official_dir: Path
+    infinity_runtime_dir: Path
     asset_dir: Path
     runtime_root: Path
     output_dir: Path
