@@ -9,7 +9,8 @@ pandas
 timm==0.9.6
 decord
 transformers
-torch==2.5.1
+# Use the CUDA-enabled PyTorch already supplied by Colab. Pinning torch here
+# causes a large reinstall and can mismatch the active CUDA runtime.
 pytz
 pandas
 wandb
@@ -19,4 +20,5 @@ einops
 openai
 httpx==0.20.0
 opencv-python
-flash_attn
+# Optional: this project uses PyTorch SDPA when FlashAttention has no wheel for
+# the active Python/PyTorch version (notably current Colab Python 3.13 images).

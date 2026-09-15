@@ -143,7 +143,9 @@ class Infinity(nn.Module):
         self.checkpointing = checkpointing
         self.pad_to_multiplier = max(1, pad_to_multiplier)
         
-        customized_kernel_installed = any('Infinity' in arg_name for arg_name in flash_attn_func.__code__.co_varnames)
+        customized_kernel_installed = flash_attn_func is not None and any(
+            'Infinity' in arg_name for arg_name in flash_attn_func.__code__.co_varnames
+        )
         self.customized_flash_attn = customized_flash_attn and customized_kernel_installed
         if customized_flash_attn and not customized_kernel_installed:
             import inspect, warnings
@@ -468,11 +470,26 @@ class Infinity(nn.Module):
         inference_mode=False,
         save_img_path=None,
         sampling_per_bits=1,
+        injected_feature=None,
+        inject_step=None,
+        f_con=None,
+        sac=False,
+        return_feature_trace=False,
     ):   # returns List[idx_Bl]
         if g_seed is None: rng = None
         else: self.rng.manual_seed(g_seed); rng = self.rng
         assert len(cfg_list) >= len(scale_schedule)
         assert len(tau_list) >= len(scale_schedule)
+        feature_injection = injected_feature is not None
+        if feature_injection:
+            if B != 2:
+                raise ValueError("Feature injection requires B=2 ordered as [content, edited]")
+            if inject_step is None or not 0 <= int(inject_step) < len(scale_schedule):
+                raise ValueError("inject_step must select one scale in scale_schedule")
+            if f_con is None or len(f_con) != len(scale_schedule):
+                raise ValueError("f_con must contain one cumulative content feature per scale")
+        elif sac:
+            raise ValueError("sac=True requires injected_feature and f_con")
 
         # scale_schedule is used by infinity, vae_scale_schedule is used by vae if there exists a spatial patchify, 
         # we need to convert scale_schedule to vae_scale_schedule by multiply 2 to h and w
@@ -512,12 +529,17 @@ class Infinity(nn.Module):
         idx_Bl_list, idx_Bld_list = [], []
 
         if inference_mode:
-            for b in self.unregistered_blocks: (b.sa if isinstance(b, CrossAttnBlock) else b.attn).kv_caching(True)
+            for b in self.unregistered_blocks:
+                attention = b.sa if isinstance(b, CrossAttnBlock) else b.attn
+                attention.kv_caching(True)
+                attention.sac = bool(sac)
         else:
             assert self.num_block_chunks > 1
             for block_chunk_ in self.block_chunks:
                 for module in block_chunk_.module.module:
-                    (module.sa if isinstance(module, CrossAttnBlock) else module.attn).kv_caching(True)
+                    attention = module.sa if isinstance(module, CrossAttnBlock) else module.attn
+                    attention.kv_caching(True)
+                    attention.sac = bool(sac)
         
         abs_cfg_insertion_layers = []
         add_cfg_on_logits, add_cfg_on_probs = False, False
@@ -535,6 +557,7 @@ class Infinity(nn.Module):
         
         num_stages_minus_1 = len(scale_schedule)-1
         summed_codes = 0
+        feature_trace = []
         for si, pn in enumerate(scale_schedule):   # si: i-th segment
             cfg = cfg_list[si]
             if si >= trunk_scale:
@@ -597,14 +620,38 @@ class Infinity(nn.Module):
                 codes = vae.quantizer.lfq.indices_to_codes(idx_Bld, label_type='bit_label') # [B, d, 1, h, w] or [B, d, 1, 2h, 2w]
                 if si != num_stages_minus_1:
                     summed_codes += F.interpolate(codes, size=vae_scale_schedule[-1], mode=vae.quantizer.z_interplote_up)
+                else:
+                    summed_codes += codes
+
+                # Feature Injection: Replace the first item in the recorded content trajectory with the content feature, and replace the second item with the injected feature at the specified injection step.
+                if feature_injection:
+                    # Keep the first item on the recorded content trajectory.  SAC
+                    # uses its self-attention Q/K to correct the edited second item.
+                    content_feature = f_con[si].to(device=summed_codes.device, dtype=summed_codes.dtype)
+                    if content_feature.shape != summed_codes[:1].shape:
+                        raise ValueError(
+                            f"f_con[{si}] has shape {content_feature.shape}, expected {summed_codes[:1].shape}"
+                        )
+                    summed_codes = summed_codes.clone()
+                    summed_codes[:1] = content_feature
+                    if si == int(inject_step):
+                        edit = injected_feature.to(device=summed_codes.device, dtype=summed_codes.dtype)
+                        if edit.shape != summed_codes[1:2].shape:
+                            raise ValueError(
+                                f"injected_feature has shape {edit.shape}, expected {summed_codes[1:2].shape}"
+                            )
+                        summed_codes[1:2] = edit
+
+                if return_feature_trace:
+                    feature_trace.append(summed_codes.detach().float().clone())
+
+                if si != num_stages_minus_1:
                     last_stage = F.interpolate(summed_codes, size=vae_scale_schedule[si+1], mode=vae.quantizer.z_interplote_up) # [B, d, 1, h, w] or [B, d, 1, 2h, 2w]
                     last_stage = last_stage.squeeze(-3) # [B, d, h, w] or [B, d, 2h, 2w]
                     if self.apply_spatial_patchify: # patchify operation
                         last_stage = torch.nn.functional.pixel_unshuffle(last_stage, 2) # [B, 4d, h, w]
                     last_stage = last_stage.reshape(*last_stage.shape[:2], -1) # [B, d, h*w] or [B, 4d, h*w]
                     last_stage = torch.permute(last_stage, [0,2,1]) # [B, h*w, d] or [B, h*w, 4d]
-                else:
-                    summed_codes += codes
             else:
                 if si < gt_leak:
                     idx_Bl = gt_ls_Bl[si]
@@ -622,15 +669,21 @@ class Infinity(nn.Module):
                 last_stage = last_stage.repeat(bs//B, 1, 1)
 
         if inference_mode:
-            for b in self.unregistered_blocks: (b.sa if isinstance(b, CrossAttnBlock) else b.attn).kv_caching(False)
+            for b in self.unregistered_blocks:
+                attention = b.sa if isinstance(b, CrossAttnBlock) else b.attn
+                attention.kv_caching(False)
+                attention.sac = False
         else:
             assert self.num_block_chunks > 1
             for block_chunk_ in self.block_chunks:
                 for module in block_chunk_.module.module:
-                    (module.sa if isinstance(module, CrossAttnBlock) else module.attn).kv_caching(False)
+                    attention = module.sa if isinstance(module, CrossAttnBlock) else module.attn
+                    attention.kv_caching(False)
+                    attention.sac = False
 
         if not ret_img:
-            return ret, idx_Bl_list, []
+            output = (ret, idx_Bl_list, [])
+            return (*output, feature_trace) if return_feature_trace else output
         
         if vae_type != 0:
             img = vae.decode(summed_codes.squeeze(-3))
@@ -639,7 +692,69 @@ class Infinity(nn.Module):
 
         img = (img + 1) / 2
         img = img.permute(0, 2, 3, 1).mul_(255).to(torch.uint8).flip(dims=(3,))
-        return ret, idx_Bl_list, img
+        output = (ret, idx_Bl_list, img)
+        return (*output, feature_trace) if return_feature_trace else output
+
+    @torch.no_grad()
+    def autoregressive_infer_pfb(
+        self,
+        *args,
+        pfb_feature,
+        inject_step,
+        f_con,
+        sac=False,
+        return_feature_trace=False,
+        **kwargs,
+    ):
+        """Infer with an externally computed PFB feature at one AR scale.
+
+        The caller supplies paired text conditioning and ``B=2`` in the order
+        ``[content, edited]``. ``pfb_feature`` is the complete cumulative feature
+        that replaces the edited item at ``inject_step``; PFB itself is kept out
+        of the autoregressive sampler.
+        """
+        kwargs.setdefault("B", 2)
+        if kwargs["B"] != 2:
+            raise ValueError("autoregressive_infer_pfb requires B=2")
+        return self.autoregressive_infer_cfg(
+            *args,
+            **kwargs,
+            injected_feature=pfb_feature,
+            inject_step=inject_step,
+            f_con=f_con,
+            sac=sac,
+            return_feature_trace=return_feature_trace,
+        )
+
+    @torch.no_grad()
+    def autoregressive_infer_content_ortho(
+        self,
+        *args,
+        content_ortho_feature,
+        inject_step,
+        f_con,
+        sac=False,
+        return_feature_trace=False,
+        **kwargs,
+    ):
+        """Infer with an externally computed content-orthogonal feature.
+
+        Input and batch semantics match :meth:`autoregressive_infer_pfb`.  This
+        separate entry point keeps experiment results explicit while both paths
+        share the battle-tested Infinity sampling implementation.
+        """
+        kwargs.setdefault("B", 2)
+        if kwargs["B"] != 2:
+            raise ValueError("autoregressive_infer_content_ortho requires B=2")
+        return self.autoregressive_infer_cfg(
+            *args,
+            **kwargs,
+            injected_feature=content_ortho_feature,
+            inject_step=inject_step,
+            f_con=f_con,
+            sac=sac,
+            return_feature_trace=return_feature_trace,
+        )
     
     @for_visualize
     def vis_key_params(self, ep):

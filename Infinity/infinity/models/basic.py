@@ -14,9 +14,13 @@ import numpy as np
 from timm.models.layers import DropPath, drop_path
 from torch.utils.checkpoint import checkpoint
 
-# Import flash_attn's attention
-from flash_attn import flash_attn_func                  # q, k, or v: BLHc, ret: BLHc
-from flash_attn import flash_attn_varlen_kvpacked_func  # qkv: N3Hc, ret: NHc
+# FlashAttention is optional. Colab's current Python/PyTorch images often do
+# not have a compatible prebuilt wheel; Infinity falls back to PyTorch SDPA.
+try:
+    from flash_attn import flash_attn_func                  # q, k, or v: BLHc, ret: BLHc
+    from flash_attn import flash_attn_varlen_kvpacked_func  # qkv: N3Hc, ret: NHc
+except ImportError:
+    flash_attn_func = flash_attn_varlen_kvpacked_func = None
 
 from torch.nn.functional import scaled_dot_product_attention as slow_attn    # q, k, v: BHLc
 
@@ -274,7 +278,12 @@ class SelfAttention(nn.Module):
         B, L, C = x.shape
         
         # qkv: amp, bf16
-        qkv = F.linear(input=x, weight=self.mat_qkv.weight, bias=torch.cat((self.q_bias, self.zero_k_bias, self.v_bias))).view(B, L, 3, self.num_heads, self.head_dim)  # BL3Hc
+        # Call the module instead of reading .weight directly. GGUF loaders may
+        # replace this Linear with a quantized module whose forward dequantizes
+        # Q8 weights; F.linear(..., module.weight) would see raw uint8 storage.
+        qkv = self.mat_qkv(x)
+        qkv = qkv + torch.cat((self.q_bias, self.zero_k_bias, self.v_bias)).to(qkv)
+        qkv = qkv.view(B, L, 3, self.num_heads, self.head_dim)  # BL3Hc
         if self.using_flash: q, k, v = qkv.unbind(dim=2); L_dim = 1           # q or k or v: all are shaped in (B:batch_size, L:seq_len, H:heads, c:head_dim)
         else: q, k, v = qkv.permute(2, 0, 3, 1, 4).unbind(dim=0); L_dim = 2   # q or k or v: all are shaped in (B:batch_size, H:heads, L:seq_len, c:head_dim)
         
@@ -289,6 +298,19 @@ class SelfAttention(nn.Module):
             v = v.contiguous()      # bf16
         if rope2d_freqs_grid is not None:
             q, k = apply_rotary_emb(q, k, scale_schedule, rope2d_freqs_grid, self.pad_to_multiplier, self.rope2d_normalized_by_hw, scale_ind) #, freqs_cis=freqs_cis)
+
+        # Structural Attention Correction for paired feature-injection inference.
+        # Batch order is [content, edited] without CFG and
+        # [content, edited, content-uncond, edited-uncond] with CFG.
+        if getattr(self, "sac", False):
+            if B == 2:
+                q = torch.cat((q[:1], q[:1]), dim=0)
+                k = torch.cat((k[:1], k[:1]), dim=0)
+            elif B == 4:
+                q = torch.cat((q[:1], q[:1], q[2:3], q[2:3]), dim=0)
+                k = torch.cat((k[:1], k[:1], k[2:3], k[2:3]), dim=0)
+            else:
+                raise RuntimeError(f"SAC expects a paired batch of 2 or 4, received {B}")
         if self.caching:    # kv caching: only used during inference
             if self.cached_k is None: self.cached_k = k; self.cached_v = v
             else: k = self.cached_k = torch.cat((self.cached_k, k), dim=L_dim); v = self.cached_v = torch.cat((self.cached_v, v), dim=L_dim)
@@ -370,7 +392,11 @@ class CrossAttention(nn.Module):
         kv_compact, cu_seqlens_k, max_seqlen_k = ca_kv
         N = kv_compact.shape[0]
         
-        kv_compact = F.linear(kv_compact, weight=self.mat_kv.weight, bias=torch.cat((self.zero_k_bias, self.v_bias))).view(N, 2, self.num_heads, self.head_dim) # NC => N2Hc
+        # Preserve quantized Linear.forward(); accessing .weight directly can
+        # bypass GGUF dequantization and feed raw Byte weights to F.linear.
+        kv_compact = self.mat_kv(kv_compact)
+        kv_compact = kv_compact + torch.cat((self.zero_k_bias, self.v_bias)).to(kv_compact)
+        kv_compact = kv_compact.view(N, 2, self.num_heads, self.head_dim) # NC => N2Hc
         # attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens
         
         if not self.for_attn_pool:
@@ -392,7 +418,23 @@ class CrossAttention(nn.Module):
         kv_compact = kv_compact.contiguous()
         
         cu_seqlens_q = torch.arange(0, Lq * (B+1), Lq, dtype=torch.int32, device=q_compact.device)
-        if q_compact.dtype == torch.float32:    # todo: fp16 or bf16?
+        if flash_attn_varlen_kvpacked_func is None:
+            q_padded = q_compact.reshape(B, Lq, self.num_heads, self.head_dim)
+            outputs = []
+            for batch_id in range(B):
+                start = int(cu_seqlens_k[batch_id].item())
+                end = int(cu_seqlens_k[batch_id + 1].item())
+                k_item, v_item = kv_compact[start:end].unbind(dim=1)
+                q_item = q_padded[batch_id].transpose(0, 1).unsqueeze(0)
+                k_item = k_item.transpose(0, 1).unsqueeze(0)
+                v_item = v_item.transpose(0, 1).unsqueeze(0)
+                item = F.scaled_dot_product_attention(
+                    q_item.to(v_item.dtype), k_item.to(v_item.dtype), v_item,
+                    dropout_p=0.0, scale=self.scale,
+                )
+                outputs.append(item.squeeze(0).transpose(0, 1).reshape(Lq, -1))
+            oup = torch.stack(outputs).to(q_compact.dtype)
+        elif q_compact.dtype == torch.float32:    # todo: fp16 or bf16?
             oup = flash_attn_varlen_kvpacked_func(q=q_compact.to(dtype=torch.bfloat16), kv=kv_compact.to(dtype=torch.bfloat16), cu_seqlens_q=cu_seqlens_q, cu_seqlens_k=cu_seqlens_k, max_seqlen_q=Lq, max_seqlen_k=max_seqlen_k, dropout_p=0, softmax_scale=self.scale).reshape(B, Lq, -1)
             oup = oup.float()
         else:
@@ -503,7 +545,7 @@ class CrossAttnBlock(nn.Module):
             if self.checkpointing_sa_only and self.training:
                 x_sa = checkpoint(self.sa, x_sa, attn_bias_or_two_vector, attn_fn, scale_schedule, rope2d_freqs_grid, use_reentrant=False)
             else:
-                x_sa = self.sa(x_sa, attn_bias_or_two_vector, attn_fn, scale_schedule, rope2d_freqs_grid)
+                x_sa = self.sa(x_sa, attn_bias_or_two_vector, attn_fn, scale_schedule, rope2d_freqs_grid, scale_ind=scale_ind)
             x = x + self.drop_path(x_sa.mul_(gamma1))
             x = x + self.ca(self.ca_norm(x), ca_kv).float().mul_(self.ca_gamma)
             x = x + self.drop_path(self.ffn( self.ln_wo_grad(x.float()).mul(scale2.add(1)).add_(shift2) ).mul(gamma2)) # this mul(gamma2) cannot be in-placed cuz we possibly use FusedMLP
