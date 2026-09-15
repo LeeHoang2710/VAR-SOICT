@@ -34,3 +34,39 @@ Counts:
 - Content prompts: 190
 - Style references: 21
 - Evaluation cases: 3990
+
+## Full content-orthogonal batch (190 x 10)
+
+Download the official full-precision Infinity-2B assets, both the requested
+d64 tokenizer and the d32reg tokenizer required by the released 2B checkpoint:
+
+```bash
+python3 -m pip install huggingface_hub
+python3 scripts/download_infinity_weights.py --output-dir weights
+```
+
+Validate all CSV rows and reference-image paths without loading CUDA:
+
+```bash
+python3 scripts/run_content_ortho_batch.py --validate-only
+```
+
+Run one case as a GPU smoke test, then resume the complete 1,900-image job:
+
+```bash
+python3 scripts/run_content_ortho_batch.py --limit 1
+python3 scripts/run_content_ortho_batch.py
+```
+
+The default is 512x512 (`--pn 0.25M`) and zero-based `--inject-step 1`.
+Completed case folders are skipped, so an interrupted run is resumable. Use
+`--overwrite` only when intentionally regenerating finished cases. Each
+`outputs/content_ortho_step_01/{style_id}/{content_id}/` folder contains exactly
+`generated.png`, `comparison.png`, and `metadata.json`. The comparison is a
+horizontal triptych: prompt-generated content, style reference, and the final
+content-orthogonal result.
+
+The released `infinity_2b_reg.pth` has 32-channel latent input/output layers
+and must run with `infinity_vae_d32reg.pth`. `infinity_vae_d64.pth` is
+downloaded as requested, but cannot be substituted into that checkpoint
+because its 64-channel tensor shapes differ.

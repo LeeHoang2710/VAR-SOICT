@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -78,7 +80,12 @@ class CLIPMetricsEvaluator:
     @staticmethod
     def cosine_score(embedding_a: torch.Tensor, embedding_b: torch.Tensor) -> float:
         score = F.cosine_similarity(embedding_a.float(), embedding_b.float(), dim=-1).item()
-        return max(0.0, float(score))
+        return float(score)
+
+    @staticmethod
+    def harmonic_score(s_txt: float, s_img: float) -> float:
+        denominator = float(s_txt) + float(s_img)
+        return (2.0 * float(s_txt) * float(s_img) / denominator) if denominator != 0.0 else 0.0
 
     @staticmethod
     def style_text_prompt(row: dict[str, object]) -> str:
@@ -102,10 +109,11 @@ class CLIPMetricsEvaluator:
                     continue
                 generated = self.image_embedding(output_path)
                 style_image = self.image_embedding(row["style_path"])
-                style_text = self.text_embedding(self.style_text_prompt(row))
-                s_txt = self.cosine_score(generated, style_text)
+                evaluation_prompt = self.content_text_prompt(row)
+                prompt_text = self.text_embedding(evaluation_prompt)
+                s_txt = self.cosine_score(generated, prompt_text)
                 s_img = self.cosine_score(generated, style_image)
-                s_harmonic = (2 * s_txt * s_img / (s_txt + s_img)) if (s_txt + s_img) > 0 else 0.0
+                s_harmonic = self.harmonic_score(s_txt, s_img)
                 rows.append(
                     {
                         "pair_id": int(row["pair_id"]),
@@ -116,7 +124,7 @@ class CLIPMetricsEvaluator:
                         "style_label": row["style_label"],
                         "variant": variant,
                         "variant_label": experiment.variant_labels[variant].replace("\n", " "),
-                        "style_text_prompt": self.style_text_prompt(row),
+                        "evaluation_prompt": evaluation_prompt,
                         "S_txt": s_txt,
                         "S_img": s_img,
                         "S_harmonic": s_harmonic,
@@ -124,6 +132,95 @@ class CLIPMetricsEvaluator:
                     }
                 )
         return pd.DataFrame(rows)
+
+    @staticmethod
+    def _read_csv(path: Path) -> list[dict[str, str]]:
+        with Path(path).open(newline="", encoding="utf-8-sig") as stream:
+            return list(csv.DictReader(stream))
+
+    @staticmethod
+    def _evaluation_prompt(content: dict[str, str], style: dict[str, str]) -> str:
+        descriptor = style["style_descriptor"].strip()
+        suffix = descriptor if descriptor.lower().endswith("style") else f"{descriptor} style"
+        content_prompt = content["content_prompt"]
+        superclass = content["superclass"]
+        return f"{content_prompt}, {superclass}, in {suffix}"
+
+    def compute_content_ortho_metrics(
+        self,
+        *,
+        project_root: Path,
+        generated_root: Path,
+        prompts_csv: Path | None = None,
+        styles_csv: Path | None = None,
+    ) -> pd.DataFrame:
+        """Compute FineStyle S_txt, S_img, and their harmonic mean."""
+        project_root = Path(project_root).resolve()
+        generated_root = Path(generated_root).resolve()
+        prompts_csv = prompts_csv or project_root / "prompts/content_prompts_190.csv"
+        styles_csv = styles_csv or project_root / "styles/quantitative_eval_styles_10.csv"
+        contents = self._read_csv(prompts_csv)
+        styles = self._read_csv(styles_csv)
+        rows = []
+        total = len(contents) * len(styles)
+
+        for style in tqdm(styles, desc="CLIP metrics by style", unit="style"):
+            style_path = (project_root / style["style_reference_image"]).resolve()
+            if not style_path.is_file():
+                raise FileNotFoundError(style_path)
+            style_embedding = self.image_embedding(style_path)
+            for content in tqdm(contents, desc=style["style_id"], unit="image", leave=False):
+                case_dir = generated_root / style["style_id"] / content["content_id"]
+                generated_path = case_dir / "generated.png"
+                metadata_path = case_dir / "metadata.json"
+                if not generated_path.is_file():
+                    continue
+                prompt = self._evaluation_prompt(content, style)
+                generated_embedding = self.image_embedding(generated_path)
+                s_txt = self.cosine_score(generated_embedding, self.text_embedding(prompt))
+                s_img = self.cosine_score(generated_embedding, style_embedding)
+                metadata = {}
+                if metadata_path.is_file():
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                rows.append(
+                    {
+                        "content_id": content["content_id"],
+                        "style_id": style["style_id"],
+                        "content_prompt": content["content_prompt"],
+                        "evaluation_prompt": prompt,
+                        "style_name": style["style_name"],
+                        "S_txt": s_txt,
+                        "S_img": s_img,
+                        "S_harmonic": self.harmonic_score(s_txt, s_img),
+                        "generated_path": str(generated_path),
+                        "style_reference_path": str(style_path),
+                        "seed": metadata.get("seed"),
+                        "inject_step": metadata.get("inject_step"),
+                    }
+                )
+        print(f"Found {len(rows)} / {total} generated images")
+        return pd.DataFrame(rows)
+
+    def save_content_ortho_metrics(self, metrics_df: pd.DataFrame):
+        if metrics_df.empty:
+            raise ValueError("No generated.png files found for CLIP evaluation")
+        detail_path = self.output_dir / "content_ortho_clip_metrics.csv"
+        metrics_df.to_csv(detail_path, index=False)
+        metric_columns = ["S_txt", "S_img", "S_harmonic"]
+        by_style = metrics_df.groupby(["style_id", "style_name"], as_index=False)[metric_columns].mean()
+        by_style.insert(2, "num_images", metrics_df.groupby(["style_id", "style_name"]).size().values)
+        by_style_path = self.output_dir / "content_ortho_clip_metrics_by_style.csv"
+        by_style.to_csv(by_style_path, index=False)
+        overall = pd.DataFrame([{
+            "num_images": len(metrics_df),
+            **{name: float(metrics_df[name].mean()) for name in metric_columns},
+        }])
+        overall_path = self.output_dir / "content_ortho_clip_metrics_overall.csv"
+        overall.to_csv(overall_path, index=False)
+        print("saved metrics:", detail_path)
+        print("saved style summary:", by_style_path)
+        print("saved overall summary:", overall_path)
+        return metrics_df, by_style, overall
 
     def compute_content_leakage_metrics(self, experiment, variants: list[str] | None = None) -> pd.DataFrame:
         variants = experiment.variant_order if variants is None else variants
