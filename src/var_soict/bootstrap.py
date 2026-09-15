@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import math
 import re
 import shutil
 import subprocess
@@ -102,6 +103,83 @@ def _download_hf_file(repo_id: str, filename: str, target_dir: Path, *, download
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     return Path(hf_hub_download(repo_id=repo_id, filename=filename, local_dir=str(target_dir)))
+
+
+def prepare_direct_model_files(
+    config: ExperimentConfig,
+    *,
+    model_dir: Path,
+    infinity_source_dir: Path,
+) -> ModelFiles:
+    """Download only model assets/loaders and use an existing Infinity checkout.
+
+    Unlike :func:`prepare_infinity_sources`, this function never clones or copies
+    Infinity and does not create an ``Infinity_runtime`` directory.
+    """
+    model_dir = Path(model_dir).resolve()
+    infinity_source_dir = Path(infinity_source_dir).resolve()
+    basic_path = infinity_source_dir / "infinity" / "models" / "basic.py"
+    infinity_path = infinity_source_dir / "infinity" / "models" / "infinity.py"
+    if not basic_path.exists() or not infinity_path.exists():
+        raise FileNotFoundError(f"Invalid Infinity source directory: {infinity_source_dir}")
+
+    loader_dir = model_dir / "gguf_loader"
+    asset_dir = model_dir / "weights"
+    port_script = _download_hf_file(
+        config.gguf_repo, "generate_image_2b_q8_gguf.py", loader_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    port_utils = _download_hf_file(
+        config.gguf_repo, "infinity_gguf_utils.py", loader_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    infinity_gguf = _download_hf_file(
+        config.gguf_repo, "infinity_2b_reg_Q8_0.gguf", asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    t5_gguf = _download_hf_file(
+        config.gguf_repo, "flan-t5-xl-encoder-Q8_0.gguf", asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    vae_path = _download_hf_file(
+        config.gguf_repo, "Infinity/infinity_vae_d32_reg.pth", asset_dir,
+        download_missing=config.download_missing_model_files,
+    )
+    files = ModelFiles(port_script, port_utils, basic_path, infinity_path, infinity_gguf, t5_gguf, vae_path)
+    print("Using Infinity source directly:", infinity_source_dir)
+    print("Model weights directory:", asset_dir)
+    return files
+
+
+def import_gguf_loader_direct(files: ModelFiles, *, infinity_source_dir: Path):
+    """Import the GGUF loader against the supplied Infinity source checkout."""
+    infinity_source_dir = Path(infinity_source_dir).resolve()
+    _drop_cached_infinity_modules()
+    sys.path.insert(0, str(files.port_script.parent))
+    sys.path.insert(0, str(infinity_source_dir))
+
+    loader_source = files.port_script.read_text()
+    compat_pattern = r"\n    # Apply NumPy 2\.0 compatibility patch.*?\n    # Load GGUF state dict"
+    loader_source = re.sub(
+        compat_pattern,
+        "\n    # NumPy compatibility is handled by the installed gguf package.\n    # Load GGUF state dict",
+        loader_source,
+        count=1,
+        flags=re.S,
+    )
+    patched_loader = files.port_script.parent / "generate_image_2b_q8_gguf_colab.py"
+    patched_loader.write_text(loader_source)
+    spec = importlib.util.spec_from_file_location("infinity_gguf_colab_loader", patched_loader)
+    gguf_loader = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = gguf_loader
+    spec.loader.exec_module(gguf_loader)
+
+    from infinity.models.infinity import Infinity
+    imported_path = Path(inspect.getfile(Infinity)).resolve()
+    if infinity_source_dir not in imported_path.parents:
+        raise RuntimeError(f"Expected Infinity under {infinity_source_dir}, imported {imported_path}")
+    print("Direct Infinity import check passed:", imported_path)
+    return gguf_loader
 
 
 def _make_vendored_source_pushable(source_dir: Path) -> None:
@@ -336,6 +414,29 @@ def load_model_bundle(config: ExperimentConfig, files: ModelFiles, gguf_loader) 
         text_channels=2048,
         pn=config.model_pn,
     )
+
+    # The GGUF loader replaces ordinary Linear modules with GGUFLinear, but the
+    # attention-pool query is a standalone Parameter.  Leaving that parameter
+    # in Q8_0 storage makes its packed byte count (2176) look like its logical
+    # element count (2048) when CrossAttention repeats it.
+    pool_query = infinity_model.text_proj_for_sos.ca.mat_q
+    if hasattr(pool_query, "quant_type"):
+        pool_query = gguf_loader.dequantize_gguf_tensor(
+            pool_query, target_dtype=torch.bfloat16
+        )
+        expected_shape = (
+            1,
+            infinity_model.text_proj_for_sos.ca.num_heads,
+            infinity_model.text_proj_for_sos.ca.head_dim,
+        )
+        if pool_query.numel() != math.prod(expected_shape):
+            raise RuntimeError(
+                "Dequantized text attention-pool query has "
+                f"{pool_query.numel()} elements; expected {math.prod(expected_shape)}."
+            )
+        infinity_model.text_proj_for_sos.ca.mat_q = torch.nn.Parameter(
+            pool_query.reshape(expected_shape).to(device), requires_grad=False
+        )
 
     infinity_model.eval()
     vae.eval()
