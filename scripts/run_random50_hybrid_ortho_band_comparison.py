@@ -100,6 +100,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--late-top1-weight", type=float, default=LATE_TOP1_WEIGHT)
     parser.add_argument("--projection-strength", type=float, default=PROJECTION_STRENGTH)
     parser.add_argument("--content-rank", type=int, default=CONTENT_RANK)
+    parser.add_argument(
+        "--variant",
+        choices=[variant["name"] for variant in VARIANTS],
+        default=None,
+        help="Run only one variant. Defaults to all variants.",
+    )
     parser.add_argument("--model-id", default="openai/clip-vit-base-patch32")
     parser.add_argument("--device", default=None, help="CLIP device; defaults to CUDA when available.")
     parser.add_argument("--overwrite", action="store_true")
@@ -120,6 +126,12 @@ def parse_args() -> argparse.Namespace:
     if args.late_top1_weight < 0:
         parser.error("--late-top1-weight must be non-negative")
     return args
+
+
+def selected_variants(args: argparse.Namespace) -> list[dict[str, str]]:
+    if args.variant is None:
+        return VARIANTS
+    return [variant for variant in VARIANTS if variant["name"] == args.variant]
 
 
 def evaluation_prompt(content: dict[str, str], style: dict[str, str]) -> str:
@@ -523,20 +535,21 @@ def generate(args: argparse.Namespace, sample_cases: list[tuple[dict[str, str], 
     )
     engine = StyleTransferEngine(bundle, config)
     output_root = args.output_root.resolve()
-    variant_dirs = {variant["name"]: output_root / variant["directory"] for variant in VARIANTS}
-    total = len(sample_cases) * len(VARIANTS)
+    variants = selected_variants(args)
+    variant_dirs = {variant["name"]: output_root / variant["directory"] for variant in variants}
+    total = len(sample_cases) * len(variants)
     existing = 0 if args.overwrite else sum(
         runtime.case_complete(variant_dirs[variant["name"]], style["style_id"], content["content_id"])
         for content, style in sample_cases
-        for variant in VARIANTS
+        for variant in variants
     )
     generated = 0
-    progress = tqdm(total=total, initial=existing, desc="Random-50 hybrid band comparison", unit="image")
+    progress = tqdm(total=total, initial=existing, desc="Hybrid band comparison", unit="image")
     started = time.time()
     try:
         for content, style in sample_cases:
             style_features = engine.get_style_features(style["_resolved_path"])
-            for variant in VARIANTS:
+            for variant in variants:
                 output_dir = variant_dirs[variant["name"]]
                 if not args.overwrite and runtime.case_complete(output_dir, style["style_id"], content["content_id"]):
                     continue
@@ -567,7 +580,7 @@ def evaluate(args: argparse.Namespace) -> None:
     metrics_dir = output_root / "metrics"
     evaluator = CLIPMetricsEvaluator(output_dir=metrics_dir, model_id=args.model_id, device=args.device)
     all_metrics = []
-    for variant in VARIANTS:
+    for variant in selected_variants(args):
         generated_root = output_root / variant["directory"]
         metrics = evaluator.compute_content_ortho_metrics(
             project_root=PROJECT_ROOT,
@@ -622,6 +635,7 @@ def main() -> None:
     args = parse_args()
     contents, styles = runtime.validate_inputs(args)
     print(f"Validated {len(contents)} prompts x {len(styles)} styles = {len(contents) * len(styles)} cases")
+    print("Selected variants:", ", ".join(variant["name"] for variant in selected_variants(args)))
     sample_cases = select_sample_cases(args, contents, styles)
     print(f"Random comparison sample size: {len(sample_cases)}")
     if args.validate_only:
