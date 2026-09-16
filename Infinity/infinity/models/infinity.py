@@ -471,6 +471,7 @@ class Infinity(nn.Module):
         save_img_path=None,
         sampling_per_bits=1,
         injected_feature=None,
+        injection_transform=None,
         inject_step=None,
         f_con=None,
         sac=False,
@@ -480,8 +481,10 @@ class Infinity(nn.Module):
         else: self.rng.manual_seed(g_seed); rng = self.rng
         assert len(cfg_list) >= len(scale_schedule)
         assert len(tau_list) >= len(scale_schedule)
-        feature_injection = injected_feature is not None
+        feature_injection = injected_feature is not None or injection_transform is not None
         if feature_injection:
+            if injected_feature is not None and injection_transform is not None:
+                raise ValueError("Specify injected_feature or injection_transform, not both")
             if B != 2:
                 raise ValueError("Feature injection requires B=2 ordered as [content, edited]")
             if inject_step is None or not 0 <= int(inject_step) < len(scale_schedule):
@@ -635,10 +638,14 @@ class Infinity(nn.Module):
                     summed_codes = summed_codes.clone()
                     summed_codes[:1] = content_feature
                     if si == int(inject_step):
-                        edit = injected_feature.to(device=summed_codes.device, dtype=summed_codes.dtype)
+                        if injection_transform is None:
+                            edit = injected_feature.to(device=summed_codes.device, dtype=summed_codes.dtype)
+                        else:
+                            edit = injection_transform(summed_codes[1:2], content_feature)
+                            edit = edit.to(device=summed_codes.device, dtype=summed_codes.dtype)
                         if edit.shape != summed_codes[1:2].shape:
                             raise ValueError(
-                                f"injected_feature has shape {edit.shape}, expected {summed_codes[1:2].shape}"
+                                f"injected edit has shape {edit.shape}, expected {summed_codes[1:2].shape}"
                             )
                         summed_codes[1:2] = edit
 
@@ -750,6 +757,69 @@ class Infinity(nn.Module):
             *args,
             **kwargs,
             injected_feature=content_ortho_feature,
+            inject_step=inject_step,
+            f_con=f_con,
+            sac=sac,
+            return_feature_trace=return_feature_trace,
+        )
+
+    @torch.no_grad()
+    def autoregressive_infer_content_projection(
+        self,
+        *args,
+        style_feature,
+        inject_step,
+        f_con,
+        style_rank=1,
+        content_rank=1,
+        content_variance_threshold=None,
+        alpha=1.0,
+        strength=1.0,
+        projection_strength=1.0,
+        preserve_mean=False,
+        projection_diagnostics=None,
+        sac=False,
+        return_feature_trace=False,
+        **kwargs,
+    ):
+        """Infer with projected PFB computed from the live generation feature.
+
+        At ``inject_step`` this method uses the edited branch as ``Fg``, the
+        reference feature as ``Fs``, and the recorded clean trajectory as
+        ``Fc``.  Computing the edit inside the sampler avoids approximating
+        the live generation feature with the clean content feature.
+        """
+        from var_soict.feature_hypotheses import projected_pfb_content_blend
+
+        kwargs.setdefault("B", 2)
+        if kwargs["B"] != 2:
+            raise ValueError("autoregressive_infer_content_projection requires B=2")
+        reference = style_feature
+
+        def apply_projection(generation_feature, content_feature):
+            result = projected_pfb_content_blend(
+                generation_feature,
+                reference.to(device=generation_feature.device, dtype=generation_feature.dtype),
+                content_feature,
+                style_rank=style_rank,
+                content_rank=content_rank,
+                content_variance_threshold=content_variance_threshold,
+                alpha=alpha,
+                strength=strength,
+                projection_strength=projection_strength,
+                preserve_mean=preserve_mean,
+                return_diagnostics=projection_diagnostics is not None,
+            )
+            if projection_diagnostics is None:
+                return result
+            edited, diagnostics = result
+            projection_diagnostics.extend(diagnostics)
+            return edited
+
+        return self.autoregressive_infer_cfg(
+            *args,
+            **kwargs,
+            injection_transform=apply_projection,
             inject_step=inject_step,
             f_con=f_con,
             sac=sac,
