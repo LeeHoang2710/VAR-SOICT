@@ -60,7 +60,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--decay", type=float, default=STYLE_DECAY)
     parser.add_argument("--projection-strength", type=float, default=PROJECTION_STRENGTH)
     parser.add_argument("--sac-start-step", type=int, default=SAC_START_STEP)
-    parser.add_argument("--no-preserve-mean", action="store_true")
+    parser.add_argument(
+        "--preserve-mean", action="store_true",
+        help="Retain the PFB edit's spatial mean before projection (off by default).",
+    )
     parser.add_argument("--model-id", default="openai/clip-vit-base-patch32")
     parser.add_argument("--device", default=None, help="CLIP device; defaults to CUDA when available.")
     parser.add_argument("--overwrite", action="store_true")
@@ -130,7 +133,7 @@ def content_ortho_multiscale_generate(
 ):
     import torch
     import torch.nn.functional as F
-    from var_soict.feature_hypotheses import content_orthogonal_feature_blend
+    from var_soict.feature_hypotheses import projected_pfb_content_blend
     from var_soict.style_transfer import PaperSACPatch, SACController
 
     if cfg < 1.0:
@@ -230,7 +233,7 @@ def content_ortho_multiscale_generate(
                         injection_order = inject_steps.index(step_id)
                         effective_strength = float(style_strength) * float(style_decay) ** injection_order
                         generation_before_edit = generation_summed.clone()
-                        generation_summed = content_orthogonal_feature_blend(
+                        generation_summed = projected_pfb_content_blend(
                             generation_summed,
                             style_features[step_id].to(generation_summed),
                             content_summed,
@@ -329,7 +332,7 @@ def generate(args: argparse.Namespace, contents: list[dict[str, str]], styles: l
                     style_strength=args.strength,
                     style_decay=args.decay,
                     projection_strength=args.projection_strength,
-                    preserve_mean=not args.no_preserve_mean,
+                    preserve_mean=args.preserve_mean,
                 )
                 image_path, comparison_path, metadata_path = runtime.case_paths(
                     output_dir, style["style_id"], content["content_id"]
@@ -359,7 +362,7 @@ def generate(args: argparse.Namespace, contents: list[dict[str, str]], styles: l
                     "style_strength": args.strength,
                     "style_decay": args.decay,
                     "projection_strength": args.projection_strength,
-                    "preserve_mean": not args.no_preserve_mean,
+                    "preserve_mean": args.preserve_mean,
                     "sac_start_step": args.sac_start_step,
                     "sac_calls": result["sac_calls"],
                     "max_q_copy_error": result["max_q_copy_error"],

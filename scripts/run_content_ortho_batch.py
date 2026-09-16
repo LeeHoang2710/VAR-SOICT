@@ -25,7 +25,7 @@ def load_runtime_modules() -> None:
     global torch, F, Image, ImageDraw, ImageFont, ImageOps, to_tensor, tqdm
     global dynamic_resolution_h_w, h_div_w_templates
     global load_tokenizer, load_transformer, load_visual_tokenizer
-    global content_orthogonal_feature_blend, encode_prompts
+    global encode_prompts
 
     for import_dir in (str(SRC_DIR), str(INFINITY_DIR), str(INFINITY_DIR / "tools")):
         if import_dir not in sys.path:
@@ -40,7 +40,6 @@ def load_runtime_modules() -> None:
     from run_infinity import load_tokenizer as _load_tokenizer
     from run_infinity import load_transformer as _load_transformer
     from run_infinity import load_visual_tokenizer as _load_visual_tokenizer
-    from var_soict.feature_hypotheses import content_orthogonal_feature_blend as _content_ortho
     from var_soict.stepwise_feature_experiment import encode_prompts as _encode_prompts
 
     torch, F, Image, ImageDraw, ImageFont, ImageOps, to_tensor = (
@@ -50,7 +49,7 @@ def load_runtime_modules() -> None:
     dynamic_resolution_h_w, h_div_w_templates = _resolutions, _aspect_ratios
     load_tokenizer, load_transformer = _load_tokenizer, _load_transformer
     load_visual_tokenizer = _load_visual_tokenizer
-    content_orthogonal_feature_blend, encode_prompts = _content_ortho, _encode_prompts
+    encode_prompts = _encode_prompts
 
 
 def parse_args() -> argparse.Namespace:
@@ -307,7 +306,6 @@ def main() -> None:
             **infer_kwargs(bundle, [prompt], args, trace=True),
         )
         content_trace = content_run[3]
-        content_at_step = content_trace[args.inject_step]
         content_image = result_image(content_run, 0)
         for style in missing_styles:
             if args.limit is not None and generated >= args.limit:
@@ -318,19 +316,13 @@ def main() -> None:
                 output_dir, style["style_id"], content["content_id"]
             )
             try:
-                edited = content_orthogonal_feature_blend(
-                    content_at_step,
-                    style_features[style["style_id"]].to(content_at_step),
-                    content_at_step,
-                    style_rank=args.style_rank, content_rank=args.content_rank,
-                    alpha=args.alpha, strength=args.strength,
-                    projection_strength=args.projection_strength, preserve_mean=True,
-                )
                 result = run_model(
-                    bundle.infinity_model.autoregressive_infer_content_ortho,
+                    bundle.infinity_model.autoregressive_infer_content_projection,
                     **infer_kwargs(bundle, [prompt, prompt], args, trace=False),
-                    content_ortho_feature=edited, inject_step=args.inject_step,
-                    f_con=content_trace, sac=args.sac,
+                    style_feature=style_features[style["style_id"]], inject_step=args.inject_step,
+                    f_con=content_trace, style_rank=args.style_rank, content_rank=args.content_rank,
+                    alpha=args.alpha, strength=args.strength,
+                    projection_strength=args.projection_strength, preserve_mean=False, sac=args.sac,
                 )
                 generated_image = result_image(result, 1)
                 save_image_atomic(generated_image, image_path)
@@ -351,13 +343,13 @@ def main() -> None:
                 image_progress.set_postfix(
                     content=content["content_id"], style=style["style_id"], failed=failed
                 )
-                del edited, result, generated_image
+                del result, generated_image
             except Exception as exc:
                 failed += 1
                 image_progress.close()
                 tqdm.write(f"FAILED {content['content_id']} x {style['style_id']}: {exc}", file=sys.stderr)
                 raise
-        del content_run, content_trace, content_at_step, content_image
+        del content_run, content_trace, content_image
         gc.collect()
         torch.cuda.empty_cache()
 
