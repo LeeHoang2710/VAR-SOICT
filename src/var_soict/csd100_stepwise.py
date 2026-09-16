@@ -103,8 +103,10 @@ def run_csd100_stepwise(
     sac=False,
     style_rank=1,
     content_rank=1,
+    content_variance_threshold=None,
     strength=1.0,
     projection_strength=1.0,
+    preserve_mean=False,
 ):
     """Load one CSD100 pairing, run both hypotheses, and save comparisons."""
     case = load_csd100_stepwise_case(
@@ -127,13 +129,16 @@ def run_csd100_stepwise(
         config,
         content_prompt=case.content_prompt,
         style_prompt=case.style_prompt,
+        style_reference_path=case.style_reference_path,
         inject_steps=inject_steps,
         seed=seed,
         sac=sac,
         style_rank=style_rank,
         content_rank=content_rank,
+        content_variance_threshold=content_variance_threshold,
         strength=strength,
         projection_strength=projection_strength,
+        preserve_mean=preserve_mean,
         output_dir=output_dir,
         case_name=case.case_name,
     )
