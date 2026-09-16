@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a random-50 comparison for hybrid normal/content-orthogonal schedules.
+"""Run a random-50 comparison for hybrid normal/content-projection schedules.
 
 This tests three scale-aware hypotheses:
 
@@ -9,6 +9,8 @@ This tests three scale-aware hypotheses:
      SVD-band PFB.
   C. scales 0,1,2 use normal top-1; scales 3,4,5 use content-orthogonal
      SVD-band PFB.
+  D. scales 1,2 use normal top-1; scales 3,4,5 use content-projected PFB
+     from feat/content_basis_rank.
 
 For both variants, early scales receive only top-1. Later scales receive the
 second singular band, with a small amount of top-1 retained for global
@@ -48,6 +50,7 @@ STYLE_DECAY = 0.75
 STYLE_STRENGTH = 1.0
 CONTENT_RANK = 1
 PROJECTION_STRENGTH = 1.0
+PROJECTION_STYLE_RANK = 1
 SAC_START_STEP = 2
 
 VARIANTS = [
@@ -71,6 +74,15 @@ VARIANTS = [
         "directory": "normal012_ortho345_band",
         "early_mode": "normal",
         "late_mode": "ortho",
+    },
+    {
+        "name": "normal12_projection345",
+        "label": "Normal 1-2 top1 + Content Projection 3-5",
+        "directory": "normal12_projection345",
+        "early_mode": "normal",
+        "late_mode": "projection",
+        "early_steps": [1, 2],
+        "late_steps": [3, 4, 5],
     },
 ]
 
@@ -101,6 +113,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--projection-strength", type=float, default=PROJECTION_STRENGTH)
     parser.add_argument("--content-rank", type=int, default=CONTENT_RANK)
     parser.add_argument(
+        "--content-variance-threshold",
+        type=float,
+        default=None,
+        help="Optional adaptive content-basis energy threshold in (0,1], e.g. 0.9.",
+    )
+    parser.add_argument("--projection-style-rank", type=int, default=PROJECTION_STYLE_RANK)
+    parser.add_argument(
+        "--preserve-mean",
+        action="store_true",
+        help="Add raw mean/palette delta before content projection. Off by default.",
+    )
+    parser.add_argument(
         "--variant",
         choices=[variant["name"] for variant in VARIANTS],
         default=None,
@@ -119,8 +143,14 @@ def parse_args() -> argparse.Namespace:
         parser.error("--sample-size must be positive")
     if args.generate_only and args.metrics_only:
         parser.error("--generate-only and --metrics-only are mutually exclusive")
-    if args.content_rank < 1:
-        parser.error("--content-rank must be positive")
+    if args.content_rank < 0:
+        parser.error("--content-rank must be non-negative")
+    if args.content_rank == 0 and args.content_variance_threshold is None:
+        parser.error("--content-rank 0 requires --content-variance-threshold")
+    if args.content_variance_threshold is not None and not 0 < args.content_variance_threshold <= 1:
+        parser.error("--content-variance-threshold must be in (0, 1]")
+    if args.projection_style_rank < 1:
+        parser.error("--projection-style-rank must be positive")
     if args.projection_strength < 0 or args.projection_strength > 1:
         parser.error("--projection-strength must be in [0, 1]")
     if args.late_top1_weight < 0:
@@ -132,6 +162,18 @@ def selected_variants(args: argparse.Namespace) -> list[dict[str, str]]:
     if args.variant is None:
         return VARIANTS
     return [variant for variant in VARIANTS if variant["name"] == args.variant]
+
+
+def early_steps_for_variant(variant: dict[str, str]) -> list[int]:
+    return list(variant.get("early_steps", EARLY_STEPS))
+
+
+def late_steps_for_variant(variant: dict[str, str]) -> list[int]:
+    return list(variant.get("late_steps", LATE_STEPS))
+
+
+def inject_steps_for_variant(variant: dict[str, str]) -> list[int]:
+    return early_steps_for_variant(variant) + late_steps_for_variant(variant)
 
 
 def evaluation_prompt(content: dict[str, str], style: dict[str, str]) -> str:
@@ -282,6 +324,36 @@ def ortho_late_band_delta(
     return float(top1_weight) * residual_top1 + (residual_top2 - residual_top1)
 
 
+def projected_content_delta(
+    generation_feature,
+    style_feature,
+    content_feature,
+    *,
+    alpha: float,
+    style_rank: int,
+    content_rank: int | None,
+    content_variance_threshold: float | None,
+    projection_strength: float,
+    preserve_mean: bool,
+):
+    from var_soict.feature_hypotheses import projected_pfb_content_blend
+
+    edited, diagnostics = projected_pfb_content_blend(
+        generation_feature,
+        style_feature,
+        content_feature,
+        style_rank=style_rank,
+        content_rank=content_rank,
+        content_variance_threshold=content_variance_threshold,
+        alpha=alpha,
+        strength=1.0,
+        projection_strength=projection_strength,
+        preserve_mean=preserve_mean,
+        return_diagnostics=True,
+    )
+    return edited - generation_feature, diagnostics
+
+
 def hybrid_delta_for_step(
     *,
     step_id: int,
@@ -291,10 +363,12 @@ def hybrid_delta_for_step(
     content_feature,
     args: argparse.Namespace,
 ):
-    if step_id in EARLY_STEPS:
+    early_steps = early_steps_for_variant(variant)
+    late_steps = late_steps_for_variant(variant)
+    if step_id in early_steps:
         mode = variant["early_mode"]
         if mode == "normal":
-            return normal_top1_delta(generation_feature, style_feature, alpha=args.alpha)
+            return normal_top1_delta(generation_feature, style_feature, alpha=args.alpha), []
         if mode == "ortho":
             return ortho_top1_delta(
                 style_feature,
@@ -302,8 +376,8 @@ def hybrid_delta_for_step(
                 alpha=args.alpha,
                 content_rank=args.content_rank,
                 projection_strength=args.projection_strength,
-            ).to(generation_feature)
-    if step_id in LATE_STEPS:
+            ).to(generation_feature), []
+    if step_id in late_steps:
         mode = variant["late_mode"]
         if mode == "normal":
             return normal_late_band_delta(
@@ -311,7 +385,7 @@ def hybrid_delta_for_step(
                 style_feature,
                 alpha=args.alpha,
                 top1_weight=args.late_top1_weight,
-            )
+            ), []
         if mode == "ortho":
             return ortho_late_band_delta(
                 style_feature,
@@ -320,7 +394,20 @@ def hybrid_delta_for_step(
                 content_rank=args.content_rank,
                 projection_strength=args.projection_strength,
                 top1_weight=args.late_top1_weight,
-            ).to(generation_feature)
+            ).to(generation_feature), []
+        if mode == "projection":
+            content_rank = None if args.content_rank == 0 else args.content_rank
+            return projected_content_delta(
+                generation_feature,
+                style_feature,
+                content_feature,
+                alpha=args.alpha,
+                style_rank=args.projection_style_rank,
+                content_rank=content_rank,
+                content_variance_threshold=args.content_variance_threshold,
+                projection_strength=args.projection_strength,
+                preserve_mean=args.preserve_mean,
+            )
     raise ValueError(f"Step {step_id} is not configured for hybrid injection.")
 
 
@@ -331,8 +418,9 @@ def hybrid_generate(engine, prompt: str, style_features: list, variant: dict[str
 
     if args.cfg < 1.0:
         raise ValueError("CFG must be >= 1.0 for this dual-stream experiment.")
-    if max(INJECT_STEPS) >= len(engine.scale_schedule):
-        raise ValueError(f"Need at least {max(INJECT_STEPS) + 1} scales, got {len(engine.scale_schedule)}")
+    inject_steps = inject_steps_for_variant(variant)
+    if max(inject_steps) >= len(engine.scale_schedule):
+        raise ValueError(f"Need at least {max(inject_steps) + 1} scales, got {len(engine.scale_schedule)}")
 
     engine.model.eval()
     base_batch = 1
@@ -364,6 +452,7 @@ def hybrid_generate(engine, prompt: str, style_features: list, variant: dict[str
     generation_summed = torch.zeros_like(content_summed)
     content_trace, generation_trace = [], []
     pfb_relative_change_by_step = {}
+    projection_diagnostics_by_step = {}
 
     controller = SACController(base_batch)
     controller.sac_strength = 1.0
@@ -418,23 +507,26 @@ def hybrid_generate(engine, prompt: str, style_features: list, variant: dict[str
                     content_summed = content_summed + content_codes
                     generation_summed = generation_summed + generation_codes
 
-                    if step_id in INJECT_STEPS:
-                        injection_order = INJECT_STEPS.index(step_id)
+                    if step_id in inject_steps:
+                        injection_order = inject_steps.index(step_id)
                         effective_strength = STYLE_STRENGTH * float(args.decay) ** injection_order
                         generation_before_edit = generation_summed.clone()
-                        delta = hybrid_delta_for_step(
+                        delta, diagnostics = hybrid_delta_for_step(
                             step_id=step_id,
                             variant=variant,
                             generation_feature=generation_summed,
                             style_feature=style_features[step_id],
                             content_feature=content_summed,
                             args=args,
-                        ).to(generation_summed)
+                        )
+                        delta = delta.to(generation_summed)
                         generation_summed = generation_summed + effective_strength * delta
                         pfb_relative_change_by_step[step_id] = float(
                             (generation_summed - generation_before_edit).norm()
                             / generation_before_edit.norm().clamp_min(1e-8)
                         )
+                        if diagnostics:
+                            projection_diagnostics_by_step[step_id] = diagnostics
 
                     content_trace.append(content_summed.detach().float().clone())
                     generation_trace.append(generation_summed.detach().float().clone())
@@ -456,6 +548,7 @@ def hybrid_generate(engine, prompt: str, style_features: list, variant: dict[str
             "max_q_copy_error": controller.max_q_copy_error,
             "max_k_copy_error": controller.max_k_copy_error,
             "pfb_relative_change_by_step": pfb_relative_change_by_step,
+            "projection_diagnostics_by_step": projection_diagnostics_by_step,
         }
     finally:
         controller.active = False
@@ -475,6 +568,9 @@ def save_case_result(
     image_path, comparison_path, metadata_path = runtime.case_paths(output_dir, style["style_id"], content["content_id"])
     generated_image = tensor_to_pil(result["stylized_image_01"][0])
     content_image = tensor_to_pil(result["content_image_01"][0])
+    early_steps = early_steps_for_variant(variant)
+    late_steps = late_steps_for_variant(variant)
+    inject_steps = inject_steps_for_variant(variant)
     runtime.save_image_atomic(generated_image, image_path)
     save_comparison(content_image, style["_resolved_path"], generated_image, content["content_prompt"], variant["label"], comparison_path)
     runtime.write_metadata(metadata_path, {
@@ -490,16 +586,19 @@ def save_case_result(
         "method": variant["name"],
         "variant_label": variant["label"],
         "style_source": "vae_encoded_style_reference_image",
-        "inject_steps": INJECT_STEPS,
-        "early_steps": EARLY_STEPS,
-        "late_steps": LATE_STEPS,
+        "inject_steps": inject_steps,
+        "early_steps": early_steps,
+        "late_steps": late_steps,
         "early_mode": variant["early_mode"],
         "late_mode": variant["late_mode"],
         "early_rank": EARLY_RANK,
         "late_rank": LATE_RANK,
         "late_top1_weight": args.late_top1_weight,
         "content_rank": args.content_rank,
+        "content_variance_threshold": args.content_variance_threshold,
+        "projection_style_rank": args.projection_style_rank,
         "projection_strength": args.projection_strength,
+        "preserve_mean": args.preserve_mean,
         "alpha": args.alpha,
         "style_strength": STYLE_STRENGTH,
         "style_decay": args.decay,
@@ -512,6 +611,7 @@ def save_case_result(
         "max_q_copy_error": result["max_q_copy_error"],
         "max_k_copy_error": result["max_k_copy_error"],
         "pfb_relative_change_by_step": result["pfb_relative_change_by_step"],
+        "projection_diagnostics_by_step": result["projection_diagnostics_by_step"],
     })
 
 
