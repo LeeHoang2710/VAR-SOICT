@@ -6,7 +6,7 @@ style reference image:
 
   A. raw residual:              G_s + lambda * (S_s - G_s)
   B. SVD residual:              G_s + lambda * (svd(S_s) - svd(G_s))
-  C. content-orthogonal SVD:    G_s + lambda * svd(S_s - proj_content(S_s))
+  C. content-projected PFB:     G_s + lambda * (I - eta Pc)[svd(S_s) - svd(G_s)]
 
 For every sampled prompt/style pair, it injects at exactly one scale at a time
 and saves the final image.  It then reports:
@@ -50,7 +50,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 METHODS = {
     "raw_residual": "Raw style residual",
     "svd_residual": "Top-k SVD style residual",
-    "content_ortho_svd": "Content-orthogonal top-k SVD",
+    "content_projection": "Content-projected top-k PFB",
 }
 
 
@@ -79,10 +79,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=900)
     parser.add_argument("--top-p", type=float, default=0.97)
     parser.add_argument("--style-rank", type=int, default=1)
-    parser.add_argument("--content-rank", type=int, default=1)
+    parser.add_argument(
+        "--content-rank",
+        type=int,
+        default=1,
+        help="Fixed content-basis rank. Use 0 with --content-variance-threshold for adaptive rank without a cap.",
+    )
+    parser.add_argument(
+        "--content-variance-threshold",
+        type=float,
+        default=None,
+        help="Optional cumulative content-basis energy in (0,1], e.g. 0.9 for adaptive rank.",
+    )
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument("--strength", type=float, default=1.0)
     parser.add_argument("--projection-strength", type=float, default=1.0)
+    parser.add_argument(
+        "--preserve-mean",
+        action="store_true",
+        help="Add a raw mean/palette delta before content projection. Off by default to match content_basis_rank.",
+    )
     parser.add_argument("--vae-type", type=int, default=32)
     parser.add_argument("--model-type", type=str, default="infinity_2b")
     parser.add_argument("--text-channels", type=int, default=2048)
@@ -91,7 +107,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--csd-model-id", type=str, default=os.environ.get("CSD_EVAL_MODEL_ID", ""))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--package-zip", action=argparse.BooleanOptionalAction, default=True)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.style_rank < 1:
+        parser.error("--style-rank must be positive")
+    if args.content_rank < 0:
+        parser.error("--content-rank must be non-negative")
+    if args.content_rank == 0 and args.content_variance_threshold is None:
+        parser.error("--content-rank 0 requires --content-variance-threshold")
+    if args.content_variance_threshold is not None and not 0 < args.content_variance_threshold <= 1:
+        parser.error("--content-variance-threshold must be in (0, 1]")
+    if not 0 <= args.projection_strength <= 1:
+        parser.error("--projection-strength must be in [0, 1]")
+    return args
 
 
 def build_output_dirs(output_dir: Path) -> OutputDirs:
@@ -146,7 +173,7 @@ def import_runtime(infinity_dir: Path):
     from infinity.models.infinity import sample_with_top_k_top_p_also_inplace_modifying_logits_
     from infinity.utils.dynamic_resolution import dynamic_resolution_h_w, h_div_w_templates
     from run_infinity import load_tokenizer, load_transformer, load_visual_tokenizer
-    from var_soict.feature_hypotheses import content_orthogonal_feature_blend, truncated_svd
+    from var_soict.feature_hypotheses import truncated_svd
 
     return SimpleNamespace(
         sample_with_top_k_top_p=sample_with_top_k_top_p_also_inplace_modifying_logits_,
@@ -155,7 +182,6 @@ def import_runtime(infinity_dir: Path):
         load_tokenizer=load_tokenizer,
         load_transformer=load_transformer,
         load_visual_tokenizer=load_visual_tokenizer,
-        content_orthogonal_feature_blend=content_orthogonal_feature_blend,
         truncated_svd=truncated_svd,
     )
 
@@ -293,25 +319,133 @@ def style_features_from_image(vae, image_path: Path, image_size: int, scale_sche
     return features
 
 
+def _feature_matrix(feature: torch.Tensor) -> torch.Tensor:
+    return feature.detach().float().reshape(feature.shape[0], feature.shape[1], -1)
+
+
+def estimate_content_basis(
+    content_feature: torch.Tensor,
+    *,
+    content_rank: int | None = 1,
+    variance_threshold: float | None = None,
+):
+    """Estimate per-sample channel bases from centered content activations.
+
+    This mirrors ``feat/content_basis_rank``.  A fixed ``content_rank`` is the
+    simple baseline; ``variance_threshold`` chooses the smallest content rank
+    that explains enough centered content energy, optionally capped by
+    ``content_rank``.
+    """
+    if content_rank is not None and content_rank < 1:
+        raise ValueError("content_rank must be positive or None")
+    if variance_threshold is not None and not 0.0 < variance_threshold <= 1.0:
+        raise ValueError("variance_threshold must be in (0, 1]")
+    if content_rank is None and variance_threshold is None:
+        raise ValueError("Specify content_rank, variance_threshold, or both")
+
+    bases, diagnostics = [], []
+    for content_matrix in _feature_matrix(content_feature):
+        centered = content_matrix - content_matrix.mean(dim=1, keepdim=True)
+        u, singular_values, _ = torch.linalg.svd(centered, full_matrices=False)
+        energy = singular_values.square()
+        total_energy = energy.sum()
+        if centered.shape[1] <= 1 or float(total_energy) <= torch.finfo(centered.dtype).eps:
+            used_rank = 0
+        elif variance_threshold is None:
+            used_rank = min(int(content_rank), singular_values.numel())
+        else:
+            cumulative = energy.cumsum(0) / total_energy
+            threshold_rank = int(torch.searchsorted(cumulative, variance_threshold).item()) + 1
+            used_rank = threshold_rank if content_rank is None else min(threshold_rank, int(content_rank))
+        basis = u[:, :used_rank]
+        explained = 0.0 if used_rank == 0 else float(energy[:used_rank].sum() / total_energy)
+        gap = 0.0
+        if 0 < used_rank < singular_values.numel():
+            gap = float(singular_values[used_rank - 1] / singular_values[used_rank].clamp_min(1e-12))
+        bases.append(basis)
+        diagnostics.append({"rank": used_rank, "explained_variance": explained, "spectral_gap": gap})
+    return bases, diagnostics
+
+
+def projected_pfb_content_blend(
+    generation_feature: torch.Tensor,
+    style_feature: torch.Tensor,
+    content_feature: torch.Tensor,
+    *,
+    style_rank: int | None = 1,
+    content_rank: int | None = 1,
+    content_variance_threshold: float | None = None,
+    alpha: float = 1.0,
+    strength: float = 1.0,
+    projection_strength: float = 1.0,
+    preserve_mean: bool = False,
+    api,
+):
+    """Apply PFB after suppressing its component in a content subspace.
+
+    Implements ``Fg + strength * (I - eta Pc)[Phi(Fs) - Phi(Fg)]``.  The
+    content projector ``Pc`` is estimated from the clean content stream at the
+    same autoregressive scale.
+    """
+    if generation_feature.shape != style_feature.shape or generation_feature.shape != content_feature.shape:
+        raise ValueError(
+            f"Feature shape mismatch: generation={generation_feature.shape}, "
+            f"style={style_feature.shape}, content={content_feature.shape}"
+        )
+    if not 0.0 <= projection_strength <= 1.0:
+        raise ValueError("projection_strength must be in [0, 1]")
+
+    style_feature = style_feature.to(generation_feature)
+    content_feature = content_feature.to(generation_feature)
+    delta = api.truncated_svd(style_feature, rank=style_rank, alpha=alpha) - api.truncated_svd(
+        generation_feature, rank=style_rank, alpha=alpha
+    )
+    if preserve_mean:
+        raw_delta = _feature_matrix(style_feature - generation_feature)
+        mean_delta = raw_delta.mean(dim=2, keepdim=True).expand_as(raw_delta)
+        delta = delta + mean_delta.reshape_as(delta).to(delta)
+
+    bases, diagnostics = estimate_content_basis(
+        content_feature,
+        content_rank=content_rank,
+        variance_threshold=content_variance_threshold,
+    )
+    projected = []
+    for delta_matrix, basis, diagnostic in zip(_feature_matrix(delta), bases, diagnostics):
+        content_component = basis @ (basis.transpose(0, 1) @ delta_matrix)
+        edit = delta_matrix - float(projection_strength) * content_component
+        input_norm = delta_matrix.norm().clamp_min(1e-12)
+        diagnostic["removed_fraction"] = float(content_component.norm() / input_norm)
+        diagnostic["orthogonality_residual"] = (
+            0.0 if basis.shape[1] == 0 else float((basis.transpose(0, 1) @ edit).norm() / input_norm)
+        )
+        projected.append(edit.reshape(generation_feature.shape[1:]))
+    projected_delta = torch.stack(projected).to(generation_feature)
+    return generation_feature + float(strength) * projected_delta, diagnostics
+
+
 def apply_injection(method: str, generation_feature, style_feature, content_feature, args, api):
     style_feature = style_feature.to(generation_feature)
     if method == "raw_residual":
-        return generation_feature + float(args.strength) * (style_feature - generation_feature)
+        return generation_feature + float(args.strength) * (style_feature - generation_feature), []
     if method == "svd_residual":
         style_component = api.truncated_svd(style_feature, rank=args.style_rank, alpha=args.alpha)
         generation_component = api.truncated_svd(generation_feature, rank=args.style_rank, alpha=args.alpha)
-        return generation_feature + float(args.strength) * (style_component - generation_component)
-    if method == "content_ortho_svd":
-        return api.content_orthogonal_feature_blend(
+        return generation_feature + float(args.strength) * (style_component - generation_component), []
+    if method == "content_projection":
+        content_rank = None if args.content_rank == 0 else args.content_rank
+        return projected_pfb_content_blend(
             generation_feature,
             style_feature,
             content_feature,
             style_rank=args.style_rank,
-            content_rank=args.content_rank,
+            content_rank=content_rank,
+            content_variance_threshold=args.content_variance_threshold,
             alpha=args.alpha,
             strength=args.strength,
             projection_strength=args.projection_strength,
-            preserve_mean=True,
+            preserve_mean=args.preserve_mean,
+            api=api,
         )
     raise ValueError(f"Unknown method: {method}")
 
@@ -371,6 +505,7 @@ def generate_with_single_step_injection(
     final_size = scale_schedule[-1]
     content_summed = last_stage.new_zeros(1, infinity.d_vae, *final_size)
     generation_summed = last_stage.new_zeros(1, infinity.d_vae, *final_size)
+    injection_diagnostics = []
 
     for block in infinity.unregistered_blocks:
         self_attention_module(block).kv_caching(True)
@@ -418,7 +553,7 @@ def generate_with_single_step_injection(
                 content_summed = content_summed + content_codes
                 generation_summed = generation_summed + generation_codes
                 if step_id == inject_step:
-                    generation_summed = apply_injection(
+                    generation_summed, injection_diagnostics = apply_injection(
                         method,
                         generation_summed,
                         style_features[step_id].to(device),
@@ -434,7 +569,7 @@ def generate_with_single_step_injection(
                     last_stage = last_stage.repeat(2, 1, 1)
 
         image_01 = decode_summed_codes_to_image_01(vae, generation_summed, device)
-        return tensor_to_pil(image_01)
+        return tensor_to_pil(image_01), injection_diagnostics
     finally:
         for block in infinity.unregistered_blocks:
             self_attention_module(block).kv_caching(False)
@@ -656,10 +791,11 @@ def run_experiment(args, dirs, api, text_tokenizer, text_encoder, vae, infinity,
             step_images = []
             for step_index in range(len(scale_schedule)):
                 output_path = image_output_path(dirs, method, sample_id, step_index + 1)
+                diagnostics = []
                 if output_path.exists() and not args.force:
                     generated = Image.open(output_path).convert("RGB")
                 else:
-                    generated = generate_with_single_step_injection(
+                    generated, diagnostics = generate_with_single_step_injection(
                         prompt=prompt,
                         seed=args.seed + int(sample_id.split("_")[-1]),
                         inject_step=step_index,
@@ -689,6 +825,7 @@ def run_experiment(args, dirs, api, text_tokenizer, text_encoder, vae, infinity,
                         "content_prompt": prompt,
                         "style_reference_image": str(style_path),
                         "image_path": str(output_path),
+                        "projection_diagnostics": json.dumps(diagnostics),
                     }
                 )
                 progress.update(1)
